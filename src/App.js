@@ -407,7 +407,7 @@ function DashPage({user, orders, products, onNav}) {
 }
 
 // ─── 3. 발주 입력 ────────────────────────────────────────────
-function OrderPage({products, orders, setOrders}) {
+function OrderPage({products, orders, setOrders, vendors}) {
   const [step, setStep] = useState(1);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -553,7 +553,7 @@ function OrderPage({products, orders, setOrders}) {
           <span style={{fontWeight:700}}>총 수량</span>
           <span style={{fontWeight:900,color:C.acc,fontSize:18}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span>
         </Card>
-        <Btn ch={sending?"발송 중...":"📧 이메일 발송"} v="g" full st={{marginBottom:10}} onClick={()=>sendMail([])} disabled={sending}/>
+        <Btn ch={sending?"발송 중...":"📧 이메일 발송"} v="g" full st={{marginBottom:10}} onClick={()=>sendMail(vendors)} disabled={sending}/>
         <div style={{display:"flex",gap:10}}>
           <Btn ch="← 수정" v="g" full st={{flex:1}} onClick={()=>setStep(1)}/>
           <Btn ch="발주 완료" full st={{flex:2,background:C.ok}} onClick={submit}/>
@@ -973,7 +973,7 @@ export default function App() {
 
   const pageMap = {
     dash:     <DashPage user={user} orders={orders} products={products} onNav={setPage}/>,
-    order:    <OrderPage products={products} orders={orders} setOrders={setOrders}/>,
+    order:    <OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors}/>,
     prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors}/>,
     list:     <ListPage orders={orders} setOrders={setOrders} products={products}/>,
     vendors:  <VendorPage vendors={vendors} setVendors={setVendors}/>,
