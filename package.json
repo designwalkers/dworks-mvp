@@ -16,19 +16,3 @@
     "development": ["last 1 chrome version"]
   }
 }
-```
-
-4. **`Commit changes`** 클릭
-
----
-
-4개 파일 모두 올리면 저장소가 이렇게 보여야 해요:
-```
-dworks-mvp/
-├── package.json
-├── public/
-│   └── index.html
-├── src/
-│   ├── App.js
-│   └── index.js
-└── README.md
