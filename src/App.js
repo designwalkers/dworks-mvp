@@ -1,5 +1,39 @@
 import { useState } from "react";
 
+// ── EmailJS 설정 ─────────────────────────────────────────────
+const EJS = {
+  SERVICE_ID:  "service_tzpt3ye",
+  TEMPLATE_ID: "template_hoej0ts",
+  PUBLIC_KEY:  "KlYRj7B6JNO01D2pm",
+};
+
+async function sendEmailJS(toEmail, toName, subject, message) {
+  if (!toEmail) { alert("거래처 이메일이 등록되어 있지 않습니다.\n거래처 관리에서 이메일을 추가해주세요."); return false; }
+  try {
+    const res = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id: EJS.SERVICE_ID,
+        template_id: EJS.TEMPLATE_ID,
+        user_id: EJS.PUBLIC_KEY,
+        template_params: {
+          to_email: toEmail,
+          to_name: toName,
+          subject: subject,
+          message: message,
+          from_name: "D-Works 발주 시스템",
+          reply_to: "noreply@dworks.app",
+        }
+      })
+    });
+    if (res.status === 200) { return true; }
+    else { alert("발송 실패. EmailJS 설정을 확인해주세요."); return false; }
+  } catch(e) {
+    alert("네트워크 오류가 발생했습니다."); return false;
+  }
+}
+
 const C = {
   bg:"#F8F9FB", card:"#FFFFFF", card2:"#F3F6FA",
   bdr:"#E8ECF2", acc:"#3772FF", txt:"#111827", sub:"#8A96A8",
@@ -397,10 +431,31 @@ function OrderPage({products, orders, setOrders}) {
     setStep(3);
   }
 
-  function sendMail() {
-    const lines = items.map(it=>{const p=products.find(x=>x.id===it.pid);return `• ${p?.name||"?"} / ${it.color} / ${fmtN(it.qty)}장`;}).join("\n");
-    const body = encodeURIComponent(`발주서 보내드립니다.\n\n발주일: ${today()}\n\n[발주 내역]\n${lines}\n\n감사합니다.\n---\nD-Works`);
-    window.open(`mailto:?subject=${encodeURIComponent("[D-Works 발주서] "+today())}&body=${body}`);
+  const [sending, setSending] = useState(false);
+
+  async function sendMail(vendors) {
+    const lines = items.map(it=>{
+      const p=products.find(x=>x.id===it.pid);
+      return `• ${p?.name||"?"} / ${it.color} / ${fmtN(it.qty)}장`;
+    }).join("\n");
+    const subject = `[D-Works 발주서] ${today()}`;
+    const message = `발주서 보내드립니다.\n\n발주일: ${today()}\n\n[발주 내역]\n${lines}\n\n확인 후 회신 부탁드립니다.\n감사합니다.\n\n---\nD-Works 발주 자동화 시스템`;
+
+    // 등록된 거래처 이메일로 발송
+    const targets = vendors.filter(v=>v.email);
+    if (targets.length===0) {
+      alert("발송 가능한 이메일이 없습니다.\n거래처 관리에서 이메일을 등록해주세요.");
+      return;
+    }
+
+    setSending(true);
+    let successCount = 0;
+    for (const v of targets) {
+      const ok = await sendEmailJS(v.email, v.name, subject, message);
+      if (ok) successCount++;
+    }
+    setSending(false);
+    if (successCount > 0) alert(`✅ ${successCount}곳 거래처에 발주서를 발송했습니다!`);
   }
 
   function reset() { setStep(1); setItems([]); setSearch(""); setSelProd(null); setSelColor(""); setQty(""); }
@@ -498,7 +553,7 @@ function OrderPage({products, orders, setOrders}) {
           <span style={{fontWeight:700}}>총 수량</span>
           <span style={{fontWeight:900,color:C.acc,fontSize:18}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span>
         </Card>
-        <Btn ch="📧 이메일 발송" v="g" full st={{marginBottom:10}} onClick={sendMail}/>
+        <Btn ch={sending?"발송 중...":"📧 이메일 발송"} v="g" full st={{marginBottom:10}} onClick={()=>sendMail([])} disabled={sending}/>
         <div style={{display:"flex",gap:10}}>
           <Btn ch="← 수정" v="g" full st={{flex:1}} onClick={()=>setStep(1)}/>
           <Btn ch="발주 완료" full st={{flex:2,background:C.ok}} onClick={submit}/>
