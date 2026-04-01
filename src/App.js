@@ -1167,9 +1167,11 @@ function PhoneMockup({children}) {
   // PC면 폰 목업 프레임
   return (
     <div style={{
-      minHeight:"100vh", background:"linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+      minHeight:"100vh", height:"100vh",
+      background:"linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
       display:"flex", alignItems:"center", justifyContent:"center",
-      fontFamily:"'Noto Sans KR',sans-serif", padding:"40px 20px"
+      fontFamily:"'Noto Sans KR',sans-serif",
+      overflow:"hidden"
     }}>
       {/* 배경 텍스트 */}
       <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:0}}>
@@ -1183,12 +1185,13 @@ function PhoneMockup({children}) {
       <div style={{position:"relative",zIndex:1}}>
         {/* 폰 외관 */}
         <div style={{
-          width:390, height:844,
+          width:375, height:812,
           background:"#1a1a1a",
-          borderRadius:54,
-          padding:"12px",
-          boxShadow:"0 0 0 2px #333, 0 30px 80px rgba(0,0,0,0.6), inset 0 0 0 2px #444",
-          position:"relative"
+          borderRadius:50,
+          padding:"10px",
+          boxShadow:"0 0 0 2px #444, 0 40px 100px rgba(0,0,0,0.7), 0 0 0 1px #222",
+          position:"relative",
+          flexShrink:0
         }}>
           {/* 사이드 버튼들 */}
           <div style={{position:"absolute",left:-3,top:120,width:3,height:32,background:"#333",borderRadius:"2px 0 0 2px"}}/>
@@ -1196,13 +1199,15 @@ function PhoneMockup({children}) {
           <div style={{position:"absolute",left:-3,top:240,width:3,height:56,background:"#333",borderRadius:"2px 0 0 2px"}}/>
           <div style={{position:"absolute",right:-3,top:160,width:3,height:80,background:"#333",borderRadius:"0 2px 2px 0"}}/>
 
-          {/* 화면 영역 */}
+          {/* 화면 영역 - transform으로 fixed 자식 격리 */}
           <div style={{
             width:"100%", height:"100%",
             background:"#fff",
             borderRadius:44,
             overflow:"hidden",
-            position:"relative"
+            position:"relative",
+            transform:"translateZ(0)",
+            isolation:"isolate"
           }}>
             {/* 노치 */}
             <div style={{
@@ -1229,6 +1234,7 @@ function PhoneMockup({children}) {
             <div style={{
               position:"absolute",top:44,left:0,right:0,bottom:0,
               overflowY:"auto", overflowX:"hidden",
+              WebkitOverflowScrolling:"touch",
             }}>
               {children}
             </div>
