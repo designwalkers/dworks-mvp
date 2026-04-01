@@ -546,33 +546,19 @@ function OrderPage({products, orders, setOrders, vendors}) {
       }
 
       // 카톡 스타일 발주서 생성
-      let body = `안녕하세요
-
-`;
+      let body = `안녕하세요\n\n`;
       for (const m of Object.values(matMap)) {
-        body += `[${m.prod.name}]
-`;
-        body += `${m.mat}
-`;
-        // 색상별 소요량
-        m.colors.forEach(c => { body += `${c}
-`; });
-        body += `
-`;
-        body += `품목 : ${m.prod.name}
-`;
-        if (m.prod.factory) {
-          body += `입고처 : ${m.prod.factory}`;
-          if (m.prod.factoryTel) body += ` ${m.prod.factoryTel}`;
-          body += `로 부탁드려요
-`;
-        }
-        body += `
-`;
+        body += `[${m.prod.name}]\n`;
+        body += `${m.mat}\n`;
+        m.colors.forEach(c => { body += `${c}\n`; });
+        body += `\n`;
+        body += `품목 : ${m.prod.name}\n`;
+        body += `------------------------\n`;
+        body += `입고처 : ${m.prod.factory||"-"}\n`;
+        body += `연락처 : ${m.prod.factoryTel||"-"}\n`;
+        body += `\n`;
       }
-      body += `감사합니다.
----
-D-Works 발주 자동화 시스템`;
+      body += `감사합니다.\n---\nD-Works 발주 자동화 시스템`;
 
       const subject = `[D-Works 발주서] ${today()} - ${vendor.name}`;
       if (await sendEmailJS(vendor.email, vendor.name, subject, body)) cnt++;
