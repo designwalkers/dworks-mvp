@@ -507,8 +507,8 @@ function OrderPage({products, orders, setOrders, vendors}) {
   }
 
   async function sendMail() {
-    // ── BOM 기반 업체별 소요량 계산 ──────────────────────────
-    const venMap = {}; // {vid: {vendor, lines:[...]}}
+    // ── BOM 기반 업체별 소요량 계산 (카톡 발주 형식) ──────────
+    const venMap = {}; // {vid: {vendor, prodMap: {prodId: {prod, colors:[]}}}}
 
     for (const it of items) {
       const prod = products.find(x=>x.id===it.pid);
@@ -517,18 +517,10 @@ function OrderPage({products, orders, setOrders, vendors}) {
       for (const b of (prod.bom||[])) {
         const ven = vendors.find(v=>v.id===b.vid);
         if (!ven) continue;
+        const soyo = Math.round(b.amt * it.qty * 100) / 100;
 
-        const soyo = Math.round(b.amt * it.qty * 100) / 100; // 소요량 계산
-
-        if (!venMap[ven.id]) venMap[ven.id] = {vendor:ven, lines:[]};
-        venMap[ven.id].lines.push(
-          `■ 원부자재명: ${b.type ? b.type+" / " : ""}${b.mat}\n` +
-          `  컬러: ${it.color}\n` +
-          `  발주 수량(소요량): ${fmtN(soyo)} ${b.unit||"yd"}\n` +
-          `  제품명: ${prod.name}\n` +
-          `  입고처: ${prod.factory||"-"}\n` +
-          `  연락처: ${prod.factoryTel||"-"}`
-        );
+        if (!venMap[ven.id]) venMap[ven.id] = {vendor:ven, entries:[]};
+        venMap[ven.id].entries.push({prod, b, color:it.color, soyo, qty:it.qty});
       }
     }
 
@@ -540,20 +532,52 @@ function OrderPage({products, orders, setOrders, vendors}) {
 
     setSending(true);
     let cnt=0;
-    for (const {vendor, lines} of targets) {
-      const subject = `[D-Works 발주서] ${today()} - ${vendor.name}`;
-      const message =
-        `${vendor.name} 담당자님 안녕하세요.\n` +
-        `D-Works 발주서 보내드립니다.\n\n` +
-        `📅 발주일: ${today()}\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `[발주 내역]\n\n` +
-        lines.join("\n\n") +
-        `\n\n━━━━━━━━━━━━━━━━━━━━\n` +
-        `확인 후 회신 부탁드립니다.\n감사합니다.\n\n---\nD-Works 발주 자동화 시스템`;
 
-      if (await sendEmailJS(vendor.email, vendor.name, subject, message)) cnt++;
+    for (const {vendor, entries} of targets) {
+      // 브랜드(회사)명
+      const brandName = entries[0]?.prod?.name ? "" : "";
+
+      // 원단명별로 그룹핑
+      const matMap = {};
+      for (const e of entries) {
+        const key = `${e.b.type||"원단"}_${e.b.mat}`;
+        if (!matMap[key]) matMap[key] = {type:e.b.type||"", mat:e.b.mat, unit:e.b.unit||"yd", colors:[], prod:e.prod};
+        matMap[key].colors.push(`${e.color} ${fmtN(e.soyo)}${e.b.unit||"yd"}`);
+      }
+
+      // 카톡 스타일 발주서 생성
+      let body = `안녕하세요
+
+`;
+      for (const m of Object.values(matMap)) {
+        body += `[${m.prod.name}]
+`;
+        body += `${m.mat}
+`;
+        // 색상별 소요량
+        m.colors.forEach(c => { body += `${c}
+`; });
+        body += `
+`;
+        body += `품목 : ${m.prod.name}
+`;
+        if (m.prod.factory) {
+          body += `입고처 : ${m.prod.factory}`;
+          if (m.prod.factoryTel) body += ` ${m.prod.factoryTel}`;
+          body += `로 부탁드려요
+`;
+        }
+        body += `
+`;
+      }
+      body += `감사합니다.
+---
+D-Works 발주 자동화 시스템`;
+
+      const subject = `[D-Works 발주서] ${today()} - ${vendor.name}`;
+      if (await sendEmailJS(vendor.email, vendor.name, subject, body)) cnt++;
     }
+
     setSending(false);
     if (cnt>0) alert(`✅ ${cnt}곳 거래처에 발주서를 발송했습니다!`);
     else alert("발송에 실패했습니다. 잠시 후 다시 시도해주세요.");
