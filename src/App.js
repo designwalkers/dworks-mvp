@@ -37,7 +37,12 @@ const fmtN = n => (n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,",");
 const CATS = ["이너","아우터","팬츠","니트","원피스","스커트","기타"];
 const CAT_C = {이너:"#3772FF",아우터:"#8B5CF6",팬츠:"#10B981",니트:"#F59E0B",원피스:"#EC4899",스커트:"#06B6D4",기타:"#9CA3AF"};
 const SEASONS = ["26SS","26FW","25SS","25FW"];
-const FACTORIES = ["공장A","공장B","공장C","기타"];
+// 공장 목록 - 환경설정에서 관리
+const INIT_FACTORIES = [
+  {id:"f1", name:"공장A", tel:"02-1234-5678"},
+  {id:"f2", name:"공장B", tel:"02-2345-6789"},
+  {id:"f3", name:"공장C", tel:"02-3456-7890"},
+];
 const VEN_TYPES = ["원단","안감","단추","지퍼","심지","기타"];
 const VEN_IC = {원단:"🧶",안감:"📋",단추:"🔘",지퍼:"🤐",심지:"🪡",기타:"🏭"};
 const VEN_C = {원단:"#3772FF",안감:"#10B981",단추:"#F59E0B",지퍼:"#8B5CF6",심지:"#06B6D4",기타:"#9CA3AF"};
@@ -668,7 +673,7 @@ function OrderPage({products, orders, setOrders, vendors}) {
 }
 
 // ── 5. 상품 관리 ──────────────────────────────────────────────
-function ProdsPage({products, setProducts, vendors}) {
+function ProdsPage({products, setProducts, vendors, factories}) {
   const [catF, setCatF] = useState("전체");
   const [sheet, setSheet] = useState(false);
   const [f, setF] = useState({name:"",category:"",season:"26SS",factory:"",colors:[],bom:[]});
@@ -678,7 +683,7 @@ function ProdsPage({products, setProducts, vendors}) {
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered = catF==="전체"?products:products.filter(p=>p.category===catF);
 
-  function openAdd() { setF({name:"",category:"",season:"26SS",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setSheet(true); }
+  function openAdd() { setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setSheet(true); }
   function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setSheet(true); }
   function addColor() { const c=ci.trim(); if(!c||f.colors.includes(c))return; setF(p=>({...p,colors:[...p.colors,c]})); setCi(""); }
   function addBom() {
@@ -745,9 +750,19 @@ function ProdsPage({products, setProducts, vendors}) {
           <Field label="상품명" req><TxtInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></Field>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <Field label="시즌"><DropSel val={f.season} onChange={sf("season")}>{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</DropSel></Field>
-            <Field label="입고처(공장명)"><TxtInp val={f.factory||""} onChange={sf("factory")} ph="예: OO봉제"/></Field>
+            <Field label="입고처(공장)">
+              <DropSel val={f.factoryId||""} onChange={v=>{
+                const fc=factories.find(x=>x.id===v);
+                setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));
+              }}>
+                <option value="">공장 선택</option>
+                {factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}
+              </DropSel>
+            </Field>
           </div>
-          <Field label="입고처 연락처"><TxtInp val={f.factoryTel||""} onChange={sf("factoryTel")} ph="예: 010-0000-0000" type="tel"/></Field>
+          <Field label="입고처 연락처">
+            <TxtInp val={f.factoryTel||""} onChange={sf("factoryTel")} ph="자동입력 또는 직접입력" type="tel"/>
+          </Field>
           <Field label="카테고리">
             <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
               {CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}
@@ -894,8 +909,9 @@ function ListPage({orders, setOrders, products}) {
 }
 
 // ── 7. 환경설정 ───────────────────────────────────────────────
-function SettingsPage({user, vendors, setVendors, onLogout}) {
+function SettingsPage({user, vendors, setVendors, factories, setFactories, onLogout}) {
   const [sheet, setSheet] = useState(false);
+  const [facSheet, setFacSheet] = useState(null);
   const [f, setF] = useState({name:"",tel:"",email:"",type:"원단"});
   const [editId, setEditId] = useState(null);
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
@@ -943,6 +959,43 @@ function SettingsPage({user, vendors, setVendors, onLogout}) {
         ))}
       </Card>
 
+      {/* 공장 관리 */}
+      <Card st={{marginTop:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:15}}>🏭 공장 관리</div>
+          <Btn ch="+ 추가" sz="s" st={{padding:"6px 12px"}} onClick={()=>{setFacSheet({id:null,name:"",tel:""});}}/>
+        </div>
+        {factories.length===0?<div style={{textAlign:"center",padding:"14px 0",color:C.sub,fontSize:13}}>등록된 공장이 없습니다</div>:
+        factories.map(fc=>(
+          <div key={fc.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.bdr}`}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:13}}>{fc.name}</div>
+              <div style={{color:C.sub,fontSize:12,marginTop:1}}>{fc.tel||"연락처 없음"}</div>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <Btn ch="수정" v="w" sz="s" st={{padding:"5px 10px",fontSize:12}} onClick={()=>setFacSheet({...fc})}/>
+              <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 10px",fontSize:12,color:C.red}} onClick={()=>{if(window.confirm("삭제?"))setFactories(ff=>ff.filter(x=>x.id!==fc.id));}}/>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {facSheet!==null&&(
+        <Sheet title={facSheet.id?"공장 수정":"공장 추가"} onClose={()=>setFacSheet(null)}>
+          <Field label="공장명" req><TxtInp val={facSheet.name||""} onChange={v=>setFacSheet(p=>({...p,name:v}))} ph="예: OO봉제"/></Field>
+          <Field label="연락처"><TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="02-0000-0000" type="tel"/></Field>
+          <G h={8}/>
+          <div style={{display:"flex",gap:10}}>
+            <Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setFacSheet(null)}/>
+            <Btn ch="저장" full st={{flex:2}} onClick={()=>{
+              if(!facSheet.name)return;
+              setFactories(facSheet.id?ff=>ff.map(x=>x.id===facSheet.id?facSheet:x):ff=>[...ff,{...facSheet,id:uid()}]);
+              setFacSheet(null);
+            }}/>
+          </div>
+        </Sheet>
+      )}
+
       {sheet&&(
         <Sheet title={editId?"거래처 수정":"거래처 추가"} onClose={()=>setSheet(false)}>
           <Field label="거래처명" req><TxtInp val={f.name||""} onChange={sf("name")} ph="거래처명 입력"/></Field>
@@ -970,6 +1023,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dash");
   const [vendors, setVendors] = useState(IV.vendors);
+  const [factories, setFactories] = useState(INIT_FACTORIES);
   const [products, setProducts] = useState(IV.products);
   const [orders, setOrders] = useState(IV.orders);
 
@@ -986,9 +1040,9 @@ export default function App() {
   const pages={
     dash:     <DashPage orders={orders} products={products} onNav={setPage}/>,
     order:    <OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors}/>,
-    prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors}/>,
+    prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories}/>,
     list:     <ListPage orders={orders} setOrders={setOrders} products={products}/>,
-    settings: <SettingsPage user={user} vendors={vendors} setVendors={setVendors} onLogout={()=>{setUser(null);setScreen("auth");}}/>,
+    settings: <SettingsPage user={user} vendors={vendors} setVendors={setVendors} factories={factories} setFactories={setFactories} onLogout={()=>{setUser(null);setScreen("auth");}}/>,
   };
 
   return (
