@@ -502,16 +502,56 @@ function OrderPage({products, orders, setOrders, vendors}) {
   }
 
   async function sendMail() {
-    const lines=items.map(it=>{const p=products.find(x=>x.id===it.pid);return `• ${p?.name||"?"} / ${it.color} / ${fmtN(it.qty)}장`;}).join("\n");
-    const subject=`[D-Works 발주서] ${today()}`;
-    const message=`발주서 보내드립니다.\n\n발주일: ${today()}\n\n[발주 내역]\n${lines}\n\n확인 후 회신 부탁드립니다.\n감사합니다.\n\n---\nD-Works 발주 자동화 시스템`;
-    const targets=vendors.filter(v=>v.email);
-    if (!targets.length) { alert("발송 가능한 이메일이 없습니다.\n거래처 관리에서 이메일을 등록해주세요."); return; }
+    // ── BOM 기반 업체별 소요량 계산 ──────────────────────────
+    const venMap = {}; // {vid: {vendor, lines:[...]}}
+
+    for (const it of items) {
+      const prod = products.find(x=>x.id===it.pid);
+      if (!prod) continue;
+
+      for (const b of (prod.bom||[])) {
+        const ven = vendors.find(v=>v.id===b.vid);
+        if (!ven) continue;
+
+        const soyo = Math.round(b.amt * it.qty * 100) / 100; // 소요량 계산
+
+        if (!venMap[ven.id]) venMap[ven.id] = {vendor:ven, lines:[]};
+        venMap[ven.id].lines.push(
+          `■ 원단명: ${b.mat}\n` +
+          `  컬러: ${it.color}\n` +
+          `  발주 수량(소요량): ${fmtN(soyo)} ${b.unit||"yd"}\n` +
+          `  제품명: ${prod.name}\n` +
+          `  입고처: ${prod.factory||"-"}\n` +
+          `  연락처: ${prod.factoryTel||"-"}`
+        );
+      }
+    }
+
+    const targets = Object.values(venMap).filter(v=>v.vendor.email);
+    if (!targets.length) {
+      alert("발송 가능한 이메일이 없습니다.\n거래처 관리에서 이메일을 등록해주세요.");
+      return;
+    }
+
     setSending(true);
     let cnt=0;
-    for (const v of targets) { if (await sendEmailJS(v.email,v.name,subject,message)) cnt++; }
+    for (const {vendor, lines} of targets) {
+      const subject = `[D-Works 발주서] ${today()} - ${vendor.name}`;
+      const message =
+        `${vendor.name} 담당자님 안녕하세요.\n` +
+        `D-Works 발주서 보내드립니다.\n\n` +
+        `📅 발주일: ${today()}\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `[발주 내역]\n\n` +
+        lines.join("\n\n") +
+        `\n\n━━━━━━━━━━━━━━━━━━━━\n` +
+        `확인 후 회신 부탁드립니다.\n감사합니다.\n\n---\nD-Works 발주 자동화 시스템`;
+
+      if (await sendEmailJS(vendor.email, vendor.name, subject, message)) cnt++;
+    }
     setSending(false);
     if (cnt>0) alert(`✅ ${cnt}곳 거래처에 발주서를 발송했습니다!`);
+    else alert("발송에 실패했습니다. 잠시 후 다시 시도해주세요.");
   }
 
   function reset() { setStep(1); setItems([]); setSearch(""); setSelProd(null); setSelColor(""); setQty(""); }
@@ -637,7 +677,7 @@ function ProdsPage({products, setProducts, vendors}) {
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered = catF==="전체"?products:products.filter(p=>p.category===catF);
 
-  function openAdd() { setF({name:"",category:"",season:"26SS",factory:"",colors:[],bom:[]}); setCi(""); setBr({mat:"",amt:"",price:"",vid:""}); setSheet(true); }
+  function openAdd() { setF({name:"",category:"",season:"26SS",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({mat:"",amt:"",price:"",vid:""}); setSheet(true); }
   function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({mat:"",amt:"",price:"",vid:""}); setSheet(true); }
   function addColor() { const c=ci.trim(); if(!c||f.colors.includes(c))return; setF(p=>({...p,colors:[...p.colors,c]})); setCi(""); }
   function addBom() { if(!br.mat||!br.amt)return; setF(p=>({...p,bom:[...p.bom,{...br,id:uid(),amt:Number(br.amt),price:Number(br.price)}]})); setBr({mat:"",amt:"",price:"",vid:""}); }
@@ -693,8 +733,9 @@ function ProdsPage({products, setProducts, vendors}) {
           <Field label="상품명" req><TxtInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></Field>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <Field label="시즌"><DropSel val={f.season} onChange={sf("season")}>{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</DropSel></Field>
-            <Field label="공장"><DropSel val={f.factory} onChange={sf("factory")}><option value="">선택</option>{FACTORIES.map(fc=><option key={fc} value={fc}>{fc}</option>)}</DropSel></Field>
+            <Field label="입고처(공장명)"><TxtInp val={f.factory||""} onChange={sf("factory")} ph="예: OO봉제"/></Field>
           </div>
+          <Field label="입고처 연락처"><TxtInp val={f.factoryTel||""} onChange={sf("factoryTel")} ph="예: 010-0000-0000" type="tel"/></Field>
           <Field label="카테고리">
             <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
               {CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}
@@ -703,7 +744,7 @@ function ProdsPage({products, setProducts, vendors}) {
           <Divider/>
           <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>원단 정보</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Field label="원단명"><TxtInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="원단명"/></Field>
+            <Field label="원단 품목명"><TxtInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글/네이비 원단"/></Field>
             <Field label="색상">
               <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
                 {f.colors.map(c=><span key={c} style={{background:C.page,borderRadius:20,padding:"3px 8px",fontSize:11,display:"flex",alignItems:"center",gap:4,border:`1px solid ${C.bdr}`}}>
@@ -716,7 +757,7 @@ function ProdsPage({products, setProducts, vendors}) {
               </div>
             </Field>
             <Field label="소요량"><TxtInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/></Field>
-            <Field label="단가"><TxtInp val={br.price} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/></Field>
+            
           </div>
           <Divider/>
           <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>업체 정보</div>
