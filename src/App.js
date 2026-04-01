@@ -909,7 +909,80 @@ function ListPage({orders, setOrders, products}) {
 }
 
 // ── 7. 환경설정 ───────────────────────────────────────────────
-function SettingsPage({user, vendors, setVendors, factories, setFactories, onLogout}) {
+// ── 거래처 페이지 ────────────────────────────────────────────
+function VendorPage({vendors, setVendors}) {
+  const [sheet, setSheet] = useState(false);
+  const [f, setF] = useState({name:"",tel:"",email:"",type:"원단"});
+  const [editId, setEditId] = useState(null);
+  const sf=k=>v=>setF(p=>({...p,[k]:v}));
+
+  function openAdd() { setF({name:"",tel:"",email:"",type:"원단"}); setEditId(null); setSheet(true); }
+  function openEdit(v) { setF({...v}); setEditId(v.id); setSheet(true); }
+  function save() {
+    if(!f.name)return;
+    setVendors(editId?vendors.map(v=>v.id===editId?{...f,id:editId}:v):[...vendors,{...f,id:uid()}]);
+    setSheet(false);
+  }
+
+  return (
+    <div style={{padding:"16px 16px 90px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <div style={{fontWeight:900,fontSize:20}}>거래처 관리</div>
+        <Btn ch="+ 추가" sz="s" st={{padding:"8px 16px"}} onClick={openAdd}/>
+      </div>
+      {/* 유형 요약 */}
+      <div style={{display:"flex",gap:8,marginBottom:16,overflowX:"auto",paddingBottom:4}}>
+        {VEN_TYPES.filter(t=>vendors.some(v=>v.type===t)).map(t=>(
+          <div key={t} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:20,padding:"6px 14px",flexShrink:0}}>
+            <span>{VEN_IC[t]}</span>
+            <span style={{fontSize:12,fontWeight:700,color:VEN_C[t]||C.sub}}>{t}</span>
+            <span style={{fontSize:12,fontWeight:800}}>{vendors.filter(v=>v.type===t).length}</span>
+          </div>
+        ))}
+      </div>
+      {vendors.length===0?<Empty icon="🏭" text="등록된 거래처가 없습니다"/>:vendors.map(v=>(
+        <Card key={v.id} st={{marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:14}}>
+            <div style={{width:44,height:44,borderRadius:12,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>
+              {VEN_IC[v.type]||"🏭"}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                <span style={{fontWeight:800,fontSize:15}}>{v.name}</span>
+                <Tag ch={v.type} c={VEN_C[v.type]||C.sub}/>
+              </div>
+              <div style={{color:C.sub,fontSize:13}}>{v.tel||"연락처 없음"}</div>
+              <div style={{fontSize:12,color:v.email?C.sub:C.warn,marginTop:2}}>{v.email||"⚠️ 이메일 미등록"}</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+              <Btn ch="수정" v="w" sz="s" st={{padding:"6px 12px"}} onClick={()=>openEdit(v)}/>
+              <Btn ch="삭제" v="w" sz="s" st={{padding:"6px 12px",color:C.red}} onClick={()=>{if(window.confirm("삭제?"))setVendors(vv=>vv.filter(x=>x.id!==v.id));}}/>
+            </div>
+          </div>
+        </Card>
+      ))}
+      {sheet&&(
+        <Sheet title={editId?"거래처 수정":"거래처 추가"} onClose={()=>setSheet(false)}>
+          <Field label="거래처명" req><TxtInp val={f.name||""} onChange={sf("name")} ph="이레텍스"/></Field>
+          <Field label="전화번호"><TxtInp val={f.tel||""} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field>
+          <Field label="이메일 (발주서 발송용)"><TxtInp val={f.email||""} onChange={sf("email")} ph="order@fabric.com" type="email"/></Field>
+          <Field label="업체 유형">
+            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+              {VEN_TYPES.map(t=>{const act=f.type===t;return<button key={t} onClick={()=>sf("type")(t)} style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${act?(VEN_C[t]||C.acc):C.bdr}`,background:act?(VEN_C[t]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:4}}>{VEN_IC[t]} {t}</button>;})}
+            </div>
+          </Field>
+          <G h={8}/>
+          <div style={{display:"flex",gap:10}}>
+            <Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/>
+            <Btn ch="저장" full st={{flex:2}} onClick={save}/>
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+function SettingsPage({user, vendors, setVendors, factories, setFactories, onLogout, onNav}) {
   const [sheet, setSheet] = useState(false);
   const [facSheet, setFacSheet] = useState(null);
   const [f, setF] = useState({name:"",tel:"",email:"",type:"원단"});
@@ -937,26 +1010,9 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
       </Card>
 
       <Card>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div style={{fontWeight:700,fontSize:15}}>🏭 거래처 관리</div>
-          <Btn ch="+ 추가" sz="s" st={{padding:"6px 12px"}} onClick={openAdd}/>
-        </div>
-        {vendors.length===0?<div style={{textAlign:"center",padding:"16px 0",color:C.sub,fontSize:13}}>등록된 거래처가 없습니다</div>:
-        vendors.map(v=>(
-          <div key={v.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 0",borderBottom:`1px solid ${C.bdr}`}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}>
-              <div style={{width:36,height:36,borderRadius:10,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16}}>{VEN_IC[v.type]||"🏭"}</div>
-              <div>
-                <div style={{fontWeight:700,fontSize:13}}>{v.name}</div>
-                <div style={{color:v.email?C.sub:C.warn,fontSize:11,marginTop:1}}>{v.email||"이메일 미등록"}</div>
-              </div>
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <Btn ch="수정" v="w" sz="s" st={{padding:"5px 10px",fontSize:12}} onClick={()=>openEdit(v)}/>
-              <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 10px",fontSize:12,color:C.red}} onClick={()=>{if(window.confirm("삭제?"))setVendors(vv=>vv.filter(x=>x.id!==v.id));}}/>
-            </div>
-          </div>
-        ))}
+        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>🏢 거래처 관리</div>
+        <div style={{color:C.sub,fontSize:13,marginBottom:12}}>{vendors.length}개 등록됨</div>
+        <Btn ch="거래처 관리 →" v="w" full onClick={()=>onNav("vendors")}/>
       </Card>
 
       {/* 공장 관리 */}
@@ -1034,7 +1090,8 @@ export default function App() {
     {k:"order",i:"📝",l:"발주하기"},
     {k:"prods",i:"👕",l:"상품"},
     {k:"list",i:"📋",l:"발주리스트"},
-    {k:"settings",i:"⚙️",l:"환경설정"},
+    {k:"vendors",i:"🏭",l:"거래처"},
+    {k:"settings",i:"⚙️",l:"설정"},
   ];
 
   const pages={
@@ -1042,7 +1099,8 @@ export default function App() {
     order:    <OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors}/>,
     prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories}/>,
     list:     <ListPage orders={orders} setOrders={setOrders} products={products}/>,
-    settings: <SettingsPage user={user} vendors={vendors} setVendors={setVendors} factories={factories} setFactories={setFactories} onLogout={()=>{setUser(null);setScreen("auth");}}/>,
+    vendors:  <VendorPage vendors={vendors} setVendors={setVendors}/>,
+    settings: <SettingsPage user={user} vendors={vendors} setVendors={setVendors} factories={factories} setFactories={setFactories} onLogout={()=>{setUser(null);setScreen("auth");}} onNav={setPage}/>,
   };
 
   return (
