@@ -123,6 +123,31 @@ function DropSel({val, onChange, children}) {
 }
 
 const Tag = ({ch,c=C.acc}) => <span style={{background:c+"18",color:c,padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700}}>{ch}</span>;
+
+// 와이어프레임 스타일 카드+행 컴포넌트
+function FCard({children,st={}}) {
+  return <div style={{background:"#fff",borderRadius:14,border:`1px solid ${C.bdr}`,overflow:"hidden",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",...st}}>{children}</div>;
+}
+function FRow({label,children,last,req}) {
+  return (
+    <div style={{display:"flex",alignItems:"center",minHeight:50,padding:"0 14px",borderBottom:last?"none":`1px solid ${C.bdr}`}}>
+      <div style={{width:72,fontSize:13,fontWeight:600,color:C.txt,flexShrink:0}}>
+        {label}{req&&<span style={{color:C.acc,marginLeft:2}}>*</span>}
+      </div>
+      <div style={{flex:1,display:"flex",alignItems:"center",minWidth:0}}>{children}</div>
+    </div>
+  );
+}
+function FInp({val,onChange,ph,type="text",onKeyDown}) {
+  return <input value={val||""} onChange={e=>onChange&&onChange(e.target.value)} placeholder={ph} type={type} onKeyDown={onKeyDown}
+    style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,padding:"0",minWidth:0,textAlign:"right"}}/>;
+}
+function FSel({val,onChange,children}) {
+  return <select value={val||""} onChange={e=>onChange(e.target.value)}
+    style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:val?C.txt:C.sub,fontFamily:C.fn,textAlign:"right",WebkitAppearance:"none",cursor:"pointer"}}>
+    {children}
+  </select>;
+}
 const Card = ({children,st={},onClick}) => <div onClick={onClick} style={{background:"#fff",borderRadius:12,border:`1px solid ${C.bdr}`,padding:16,boxSizing:"border-box",...st}}>{children}</div>;
 const G = ({h=12}) => <div style={{height:h}}/>;
 const Divider = () => <div style={{height:1,background:C.bdr,margin:"14px 0"}}/>;
@@ -141,10 +166,10 @@ function StepBar({cur,total=4}) {
 
 function Sheet({title,onClose,children}) {
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",zIndex:900}} onClick={onClose}>
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",zIndex:900}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:"#fff",borderRadius:"20px 20px 0 0",
-        padding:"0 20px 40px",width:"100%",maxHeight:"90vh",
+        padding:"0 20px 40px",width:"100%",maxHeight:"80%",
         overflowY:"auto",boxSizing:"border-box",fontFamily:C.fn
       }}>
         <div style={{width:36,height:4,background:C.bdr,borderRadius:2,margin:"12px auto 16px"}}/>
@@ -688,14 +713,14 @@ function ProdsPage({products, setProducts, vendors, factories}) {
   const [sheet, setSheet] = useState(false);
   const [f, setF] = useState({name:"",category:"",season:"26SS",factory:"",colors:[],bom:[]});
   const [ci, setCi] = useState("");
-  const [br, setBr] = useState({type:"",mat:"",amt:"",vid:""});
+  const [br, setBr] = useState({type:"",mat:"",amt:"",price:"",vid:""});
   const [editBomId, setEditBomId] = useState(null);
   const [venSearch, setVenSearch] = useState(""); // 수정 중인 BOM id
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered = catF==="전체"?products:products.filter(p=>p.category===catF);
 
-  function openAdd() { setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setVenSearch(""); setSheet(true); }
-  function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setVenSearch(""); setSheet(true); }
+  function openAdd() { setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({type:"",mat:"",amt:"",price:"",vid:""}); setVenSearch(""); setSheet(true); }
+  function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({type:"",mat:"",amt:"",price:"",vid:""}); setVenSearch(""); setSheet(true); }
   function addColor() { const c=ci.trim(); if(!c||f.colors.includes(c))return; setF(p=>({...p,colors:[...p.colors,c]})); setCi(""); }
   function addBom() {
     if(!br.mat||!br.amt) return;
@@ -707,7 +732,7 @@ function ProdsPage({products, setProducts, vendors, factories}) {
       // 추가 모드
       setF(p=>({...p,bom:[...p.bom,{...br,id:uid(),amt:Number(br.amt)}]}));
     }
-    setBr({type:"",mat:"",amt:"",vid:""});
+    setBr({type:"",mat:"",amt:"",price:"",vid:""});
   }
   function save() { if(!f.name)return; setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]); setSheet(false); }
   function del(id) { if(window.confirm("삭제?")) setProducts(products.filter(p=>p.id!==id)); }
@@ -758,115 +783,107 @@ function ProdsPage({products, setProducts, vendors, factories}) {
         <Sheet title={f.id?"상품 수정":"1단계 원단 입력"} onClose={()=>setSheet(false)}>
           <StepBar cur={0}/>
 
-          {/* 1. 상품명 */}
-          <Field label="상품명" req><TxtInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></Field>
+          {/* 기본 정보 카드 */}
+          <div style={{fontWeight:700,fontSize:13,color:C.sub,marginBottom:8,marginTop:4}}>기본 정보</div>
+          <FCard>
+            <FRow label="상품명" req>
+              <FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/>
+            </FRow>
+            <FRow label="시즌">
+              <FSel val={f.season} onChange={sf("season")}>
+                {SEASONS.map(s=><option key={s} value={s}>{s}</option>)}
+              </FSel>
+              <span style={{color:C.sub,fontSize:12,flexShrink:0}}>∨</span>
+            </FRow>
+            <FRow label="공장" last>
+              <FSel val={f.factoryId||""} onChange={v=>{
+                const fc=factories.find(x=>x.id===v);
+                setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));
+              }}>
+                <option value="">공장 선택</option>
+                {factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}
+              </FSel>
+              <span style={{color:C.sub,fontSize:12,flexShrink:0}}>∨</span>
+            </FRow>
+          </FCard>
+          {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6,paddingLeft:4}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
 
-          {/* 2. 시즌 */}
-          <Field label="시즌">
-            <DropSel val={f.season} onChange={sf("season")}>{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</DropSel>
-          </Field>
+          {/* 카테고리 */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:14}}>
+            {CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"6px 12px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}
+          </div>
 
-          {/* 3. 카테고리 */}
-          <Field label="카테고리">
-            <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-              {CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}
-            </div>
-          </Field>
-
-          <Divider/>
-
-          {/* 4. 원부자재 업체명 - 검색 */}
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>부자재 정보</div>
-          <Field label="원부자재 업체명">
-            <div style={{position:"relative"}}>
-              <div style={{display:"flex",alignItems:"center",border:`1px solid ${br.vid?C.acc:C.bdr}`,borderRadius:8,background:"#fff",overflow:"hidden"}}>
-                <input
-                  value={venSearch}
-                  onChange={e=>{
-                    setVenSearch(e.target.value);
-                    if(!e.target.value) setBr(r=>({...r,vid:""}));
-                  }}
-                  placeholder="업체명 검색"
-                  style={{flex:1,border:"none",outline:"none",padding:"13px 14px",fontSize:14,color:C.txt,fontFamily:C.fn,background:"transparent"}}
-                />
-                {br.vid && <span style={{padding:"0 12px",color:C.ok,fontSize:16}}>✓</span>}
-                {venSearch && <button onClick={()=>{setVenSearch("");setBr(r=>({...r,vid:""}));}} style={{padding:"0 12px",background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:16}}>✕</button>}
+          {/* 원단 정보 카드 */}
+          <div style={{fontWeight:700,fontSize:13,color:C.sub,marginBottom:8}}>원단 정보</div>
+          <FCard>
+            <FRow label="원단명">
+              <FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/>
+            </FRow>
+            <FRow label="색상">
+              <div style={{flex:1,display:"flex",flexWrap:"wrap",gap:4,justifyContent:"flex-end",alignItems:"center",padding:"6px 0"}}>
+                {f.colors.map(c=>(
+                  <span key={c} style={{background:C.page,borderRadius:20,padding:"2px 8px",fontSize:11,display:"flex",alignItems:"center",gap:3,border:`1px solid ${C.bdr}`}}>
+                    {c}
+                    <button onClick={()=>setF(p=>({...p,colors:p.colors.filter(x=>x!==c)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:10,lineHeight:1,padding:0}}>✕</button>
+                  </span>
+                ))}
+                <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                  <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="추가"
+                    style={{width:52,border:`1px solid ${C.bdr}`,borderRadius:6,padding:"3px 6px",fontSize:11,fontFamily:C.fn,outline:"none",textAlign:"center"}}/>
+                  <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:6,padding:"3px 8px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.fn}}>+</button>
+                </div>
               </div>
-              {/* 검색 결과 드롭다운 */}
-              {venSearch && !br.vid && (()=>{
-                const filtered = vendors.filter(v=>v.name.includes(venSearch)||v.type.includes(venSearch));
-                return filtered.length>0?(
-                  <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:50,boxShadow:"0 4px 16px rgba(0,0,0,0.1)",maxHeight:160,overflowY:"auto"}}>
-                    {filtered.map(v=>(
-                      <div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}}
-                        style={{padding:"11px 14px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <span style={{fontWeight:600,fontSize:14}}>{v.name}</span>
-                        <Tag ch={v.type} c={VEN_C[v.type]||C.sub}/>
-                      </div>
-                    ))}
-                  </div>
-                ):venSearch.length>0?(
-                  <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:50,padding:"12px 14px",fontSize:13,color:C.sub}}>
-                    검색 결과가 없습니다
-                  </div>
-                ):null;
-              })()}
-            </div>
-          </Field>
+            </FRow>
+            <FRow label="소요량">
+              <FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/>
+              <span style={{color:C.sub,fontSize:12,flexShrink:0,marginLeft:4}}>yd</span>
+            </FRow>
+            <FRow label="단가" last>
+              <FInp val={br.price||""} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/>
+              <span style={{color:C.sub,fontSize:12,flexShrink:0,marginLeft:4}}>원</span>
+            </FRow>
+          </FCard>
 
-          {/* 5. 부자재 유형 */}
-          <Field label="부자재 유형">
-            <div style={{display:"flex",flexWrap:"wrap",gap:7,paddingBottom:4}}>
-              {["메인원단","부속원단","단추","지퍼","안감","심지","기타"].map(t=>{
-                const act=br.type===t;
-                return <button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{
-                  padding:"7px 14px",borderRadius:20,whiteSpace:"nowrap",
-                  border:`1.5px solid ${act?C.acc:C.bdr}`,
-                  background:act?C.acc:"#fff",
-                  color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,
-                  cursor:"pointer",fontFamily:C.fn
-                }}>{t}</button>;
-              })}
-            </div>
-          </Field>
+          {/* 부자재 유형 */}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+            {["메인원단","부속원단","단추","지퍼","안감","심지","기타"].map(t=>{
+              const act=br.type===t;
+              return <button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{
+                padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",
+                border:`1.5px solid ${act?C.acc:C.bdr}`,
+                background:act?C.acc:"#fff",
+                color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,
+                cursor:"pointer",fontFamily:C.fn
+              }}>{t}</button>;
+            })}
+          </div>
 
-          {/* 6. 품목명 */}
-          <Field label="품목명"><TxtInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/></Field>
-
-          {/* 7. 색상 */}
-          <Field label="색상">
-            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
-              {f.colors.map(c=><span key={c} style={{background:C.page,borderRadius:20,padding:"3px 8px",fontSize:11,display:"flex",alignItems:"center",gap:4,border:`1px solid ${C.bdr}`}}>
-                {c}<button onClick={()=>setF(p=>({...p,colors:p.colors.filter(x=>x!==c)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>✕</button>
-              </span>)}
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상 추가" style={{flex:1,border:`1px solid ${C.bdr}`,borderRadius:6,padding:"7px 10px",fontSize:12,fontFamily:C.fn,outline:"none"}}/>
-              <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.fn}}>+</button>
-            </div>
-          </Field>
-
-          {/* 8. 소요량 */}
-          <Field label="소요량"><TxtInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/></Field>
-
-          <Divider/>
-
-          {/* 9. 입고처 - 맨 하단 */}
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>입고처 정보</div>
-          <Field label="입고처(공장)">
-            <DropSel val={f.factoryId||""} onChange={v=>{
-              const fc=factories.find(x=>x.id===v);
-              setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));
-            }}>
-              <option value="">공장 선택</option>
-              {factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}
-            </DropSel>
-          </Field>
-          {f.factory&&(
-            <div style={{background:C.page,borderRadius:8,padding:"10px 14px",fontSize:13,color:C.sub2,marginBottom:8}}>
-              📞 {f.factoryTel||"연락처 없음"} · 발주서에 자동 포함됩니다
-            </div>
-          )}
+          {/* 업체 정보 카드 */}
+          <div style={{fontWeight:700,fontSize:13,color:C.sub,marginBottom:8}}>업체 정보</div>
+          <FCard>
+            <FRow label="업체명" last>
+              <div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}>
+                <input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}}
+                  placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>
+                {br.vid&&<span style={{color:C.ok,fontSize:14,marginLeft:4}}>✓</span>}
+                {venSearch&&!br.vid&&(()=>{
+                  const fv=vendors.filter(v=>v.name.includes(venSearch)||v.type.includes(venSearch));
+                  return fv.length>0?(
+                    <div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:50,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:140,overflowY:"auto"}}>
+                      {fv.map(v=>(
+                        <div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}}
+                          style={{padding:"9px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontSize:13,fontWeight:600}}>{v.name}</span>
+                          <Tag ch={v.type} c={VEN_C[v.type]||C.sub}/>
+                        </div>
+                      ))}
+                    </div>
+                  ):null;
+                })()}
+              </div>
+              <span style={{color:C.sub,fontSize:12,flexShrink:0,marginLeft:4}}>∨</span>
+            </FRow>
+          </FCard>
           {f.bom.length>0&&f.bom.map(b=>{
             const ven=vendors.find(v=>v.id===b.vid);
             const isEditing=editBomId===b.id;
@@ -880,7 +897,7 @@ function ProdsPage({products, setProducts, vendors, factories}) {
                   </div>
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>{
-                      if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}
+                      if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",price:"",vid:""});setVenSearch("");}
                       else{
                       setEditBomId(b.id);
                       setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||""});
@@ -890,7 +907,7 @@ function ProdsPage({products, setProducts, vendors, factories}) {
                     }} style={{background:"none",border:"none",color:isEditing?C.acc:C.sub,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:C.fn}}>
                       {isEditing?"취소":"수정"}
                     </button>
-                    <button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button>
+                    <button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",price:"",vid:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button>
                   </div>
                 </div>
               </div>
@@ -1288,12 +1305,12 @@ export default function App() {
   return (
     <PhoneMockup>
     <div style={{minHeight:"100vh",background:C.page,fontFamily:C.fn,color:C.txt}}>
-      <div style={{background:"#fff",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100,borderBottom:`1px solid ${C.bdr}`}}>
+      <div style={{background:"#fff",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`}}>
         <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:20,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
         <span style={{color:C.sub,fontSize:13}}>{user.name}</span>
       </div>
       <div style={{paddingBottom:80}}>{pages[page]||pages["dash"]}</div>
-      <div style={{position:"sticky",bottom:0,left:0,right:0,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:100}}>
+      <div style={{position:"sticky",bottom:0,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:50}}>
         {tabs.map(t=>(
           <button key={t.k} onClick={()=>setPage(t.k)} style={{
             flex:1,padding:"10px 4px 10px",background:"none",border:"none",
