@@ -391,6 +391,22 @@ function OrderPage({products,orders,setOrders,vendors,user}) {
   const [selColor,setSelColor] = useState("");
   const [qty,setQty] = useState("");
   const [sending,setSending] = useState(false);
+  const DRAFT_KEY = "dworks_order_draft";
+
+  // 임시저장 불러오기
+  useEffect(()=>{
+    try{
+      const d = localStorage.getItem(DRAFT_KEY);
+      if(d){ const draft=JSON.parse(d); if(draft.items?.length>0){setItems(draft.items);alert("임시저장된 발주가 있습니다. 불러왔습니다!");} }
+    }catch{}
+  },[]);
+
+  function saveDraft(){
+    if(!items.length){alert("저장할 항목이 없습니다");return;}
+    try{localStorage.setItem(DRAFT_KEY,JSON.stringify({items,savedAt:new Date().toISOString()}));alert(`✅ 임시저장 완료! (${items.length}개 항목)`);}
+    catch{alert("임시저장 실패");}
+  }
+  function clearDraft(){ try{localStorage.removeItem(DRAFT_KEY);}catch{} }
 
   const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
 
@@ -411,6 +427,7 @@ function OrderPage({products,orders,setOrders,vendors,user}) {
         setOrders(p=>[...p,Array.isArray(r)?r[0]:{...newOrder,id:uid()}]);
       } else setOrders(p=>[...p,{...newOrder,id:uid()}]);
     } catch { setOrders(p=>[...p,{...newOrder,id:uid()}]); }
+    clearDraft();
     setStep(3);
   }
 
@@ -516,7 +533,7 @@ function OrderPage({products,orders,setOrders,vendors,user}) {
           }
         </Card>
         <div style={{display:"flex",gap:10}}>
-          <Btn ch="임시저장" v="w" full st={{flex:1}}/>
+          <Btn ch="임시저장" v="w" full st={{flex:1}} onClick={saveDraft}/>
           <Btn ch="다음" full st={{flex:2}} onClick={()=>items.length?setStep(2):alert("항목 추가 필요")} disabled={!items.length}/>
         </div>
       </>}
