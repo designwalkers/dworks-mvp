@@ -820,7 +820,7 @@ function ProdsPage({products, setProducts, vendors}) {
               </div>
             );
           })}
-          <Btn ch={editBomId?"✓ 수정 완료":"+ 부자재 추가"} v={editBomId?"p":"w"} full st={{marginBottom:20}} onClick={addBom}/>
+          <Btn ch={editBomId?"✓ 수정 완료":"+ 원부자재 추가"} v={editBomId?"p":"w"} full st={{marginBottom:20}} onClick={addBom}/>
           <div style={{display:"flex",gap:10}}>
             <Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/>
             <Btn ch="저장" full st={{flex:2}} onClick={save} disabled={!f.name}/>
