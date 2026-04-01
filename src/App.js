@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 
 // ── Supabase ──────────────────────────────────────────────────
 const SB_URL = "https://qimgostiseehdnvhmoph.supabase.co";
@@ -1111,9 +1111,13 @@ function VendorPage({vendors, setVendors, setVendorsDB}) {
 
   function openAdd() { setF({name:"",tel:"",email:"",type:"원단"}); setEditId(null); setSheet(true); }
   function openEdit(v) { setF({...v}); setEditId(v.id); setSheet(true); }
-  function save() {
+  async function save() {
     if(!f.name)return;
-    setVendors(editId?vendors.map(v=>v.id===editId?{...f,id:editId}:v):[...vendors,{...f,id:uid()}]);
+    if(editId) {
+      setVendors(vv=>vv.map(v=>v.id===editId?{...f,id:editId}:v));
+    } else {
+      setVendors(vv=>[...vv,{...f,id:uid()}]);
+    }
     setSheet(false);
   }
 
@@ -1313,7 +1317,7 @@ function PhoneMockup({children}) {
     const fn = ()=>setIsMobile(window.innerWidth<=768);
     window.addEventListener("resize",fn);
     return()=>window.removeEventListener("resize",fn);
-  },[]);
+  };
 
   // 모바일이면 그냥 전체화면
   if (isMobile) return <>{children}</>;
@@ -1421,7 +1425,7 @@ export default function App() {
   const [dbLoading, setDbLoading] = useState(false);
 
   // DB에서 데이터 로드
-  const loadData = useCallback(async (token) => {
+  const loadData = async (token) => {
     setDbLoading(true);
     try {
       const [v,f,p,o] = await Promise.all([
