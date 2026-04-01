@@ -153,7 +153,7 @@ function StepBar({cur,total=4}) {
 
 function Sheet({title,onClose,children}) {
   return (
-    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",zIndex:900}} onClick={onClose}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",zIndex:900}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:"#fff",borderRadius:"20px 20px 0 0",padding:"0 20px 36px",
         width:"100%",maxHeight:"82%",overflowY:"auto",boxSizing:"border-box",fontFamily:C.fn
@@ -988,7 +988,7 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout,onNa
 
 // ── 앱 루트 ───────────────────────────────────────────────────
 export default function App() {
-  const [screen,setScreen] = useState("splash");
+  const [screen,setScreen] = useState("loading");
   const [user,setUser] = useState(null);
   const [page,setPage] = useState("dash");
   const [vendors,setVendors] = useState([]);
@@ -996,6 +996,23 @@ export default function App() {
   const [products,setProducts] = useState([]);
   const [orders,setOrders] = useState([]);
   const [loading,setLoading] = useState(false);
+
+  // 자동 로그인 - 저장된 토큰 복원
+  useEffect(()=>{
+    try{
+      const saved = localStorage.getItem("dworks_session");
+      if(saved){
+        const u = JSON.parse(saved);
+        if(u?.token){
+          setUser(u);
+          setScreen("app");
+          loadData(u.token);
+          return;
+        }
+      }
+    }catch{}
+    setScreen("splash");
+  },[]);
 
   async function loadData(token) {
     setLoading(true);
@@ -1015,6 +1032,7 @@ export default function App() {
   }
 
   async function handleLogin(u) {
+    try{ localStorage.setItem("dworks_session", JSON.stringify(u)); }catch{}
     setUser(u);
     setScreen("app");
     await loadData(u.token);
@@ -1022,6 +1040,7 @@ export default function App() {
 
   async function handleLogout() {
     if(user?.token) try{await DB.signOut(user.token);}catch{}
+    try{ localStorage.removeItem("dworks_session"); }catch{}
     setUser(null);setScreen("auth");
     setVendors([]);setFactories([]);setProducts([]);setOrders([]);
   }
@@ -1034,6 +1053,17 @@ export default function App() {
     {k:"settings",i:"⚙️",l:"설정"},
   ];
 
+  if(screen==="loading") return (
+    <PhoneMockup>
+      <div style={{minHeight:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"#fff",fontFamily:C.fn}}>
+        <div style={{textAlign:"center"}}>
+          <div style={{fontSize:28,fontWeight:900,color:C.acc,letterSpacing:1,marginBottom:12}}>D-Works</div>
+          <div style={{width:32,height:32,border:`3px solid ${C.bdr}`,borderTop:`3px solid ${C.acc}`,borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}/>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      </div>
+    </PhoneMockup>
+  );
   if(screen==="splash") return <PhoneMockup><SplashPage onStart={()=>setScreen("auth")}/></PhoneMockup>;
   if(screen!=="app"||!user) return <PhoneMockup><AuthPage onLogin={handleLogin}/></PhoneMockup>;
 
