@@ -262,6 +262,7 @@ function AuthPage({onLogin}) {
   const [f,setF] = useState({name:"",company:"",email:"",pw:"",pw2:"",tel:""});
   const [err,setErr] = useState("");
   const [loading,setLoading] = useState(false);
+  const [globalSheet, setGlobalSheet] = useState(null);
   const sf = k => v => setF(p=>({...p,[k]:v}));
 
   async function submit() {
@@ -338,6 +339,7 @@ function DashPage({orders,products,onNav}) {
     return {label:ds.slice(5),v:orders.filter(o=>o.date===ds).reduce((s,o)=>s+(o.items||[]).reduce((ss,ii)=>ss+(ii.qty||0),0),0)};
   });
   return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{fontWeight:900,fontSize:20,textAlign:"center",marginBottom:14}}>대시 보드</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:1,marginBottom:14,border:`1px solid ${C.bdr}`,borderRadius:12,overflow:"hidden"}}>
@@ -378,6 +380,7 @@ function DashPage({orders,products,onNav}) {
           {chartData.filter((_,i)=>i%2===0).map(d=><span key={d.label} style={{fontSize:9,color:C.sub}}>{d.label}</span>)}
         </div>
       </Card>
+    </div>
     </div>
   );
 }
@@ -484,6 +487,7 @@ function OrderPage({products,orders,setOrders,vendors,user}) {
   );
 
   return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{fontWeight:900,fontSize:20,marginBottom:4}}>{step===1?"발주 입력":"발주서 확인"}</div>
       <div style={{color:C.sub,fontSize:12,marginBottom:14}}>기본 정보를 입력해 주세요</div>
@@ -560,13 +564,13 @@ function OrderPage({products,orders,setOrders,vendors,user}) {
         </div>
       </>}
     </div>
+    </div>
   );
 }
 
 // ── 상품 관리 ─────────────────────────────────────────────────
-function ProdsPage({products,setProducts,vendors,factories,user}) {
+function ProdsPage({products,setProducts,vendors,factories,user,gs}) {
   const [catF,setCatF] = useState("전체");
-  const [sheet,setSheet] = useState(false);
   const [f,setF] = useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});
   const [ci,setCi] = useState("");
   const [br,setBr] = useState({type:"",mat:"",amt:"",vid:""});
@@ -575,8 +579,8 @@ function ProdsPage({products,setProducts,vendors,factories,user}) {
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
 
-  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");setSheet(true);}
-  function openEdit(p){setF({...p,colors:[...(p.colors||[])],bom:(p.bom||[]).map(b=>({...b}))});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");setSheet(true);}
+  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");gs&&gs('prods');}
+  function openEdit(p){setF({...p,colors:[...(p.colors||[])],bom:(p.bom||[]).map(b=>({...b}))});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");gs&&gs('prods');}
   function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c]}));setCi("");}
   function addBom(){
     if(!br.mat||!br.amt) return;
@@ -597,7 +601,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}) {
         setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]);
       }
     } catch {setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]);}
-    setSheet(false);
+    gs&&gs(null);
   }
   async function del(id){
     if(!window.confirm("삭제?")) return;
@@ -606,6 +610,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}) {
   }
 
   return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:900,fontSize:20}}>상품 관리</div>
@@ -733,6 +738,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}) {
         </Sheet>
       )}
     </div>
+    </div>
   );
 }
 
@@ -754,6 +760,7 @@ function ListPage({orders,setOrders,products,user}) {
   }
 
   return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div>
@@ -791,6 +798,7 @@ function ListPage({orders,setOrders,products,user}) {
         </Card>;
       })}
     </div>
+    </div>
   );
 }
 
@@ -814,7 +822,7 @@ function VendorPage({vendors,setVendors,user}) {
         else setVendors(vv=>[...vv,{...f,id:uid()}]);
       }
     } catch{setVendors(editId?vv=>vv.map(v=>v.id===editId?{...v,...f}:v):vv=>[...vv,{...f,id:uid()}]);}
-    setSheet(false);
+    gs&&gs(null);
   }
   async function del(id){
     if(!window.confirm("삭제?")) return;
@@ -823,6 +831,7 @@ function VendorPage({vendors,setVendors,user}) {
   }
 
   return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
         <div style={{fontWeight:900,fontSize:20}}>거래처 관리</div>
@@ -865,6 +874,7 @@ function VendorPage({vendors,setVendors,user}) {
         </Sheet>
       )}
     </div>
+    </div>
   );
 }
 
@@ -901,6 +911,7 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout,onNa
   }
 
   return (
+    <div style={{height:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{fontWeight:900,fontSize:20,marginBottom:18}}>환경설정</div>
 
@@ -983,6 +994,7 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout,onNa
         </Sheet>
       )}
     </div>
+    </div>
   );
 }
 
@@ -996,6 +1008,7 @@ export default function App() {
   const [products,setProducts] = useState([]);
   const [orders,setOrders] = useState([]);
   const [loading,setLoading] = useState(false);
+  const [globalSheet, setGlobalSheet] = useState(null);
 
   // 자동 로그인 - 저장된 토큰 복원
   useEffect(()=>{
@@ -1061,6 +1074,11 @@ export default function App() {
           <div style={{width:32,height:32,border:`3px solid ${C.bdr}`,borderTop:`3px solid ${C.acc}`,borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}/>
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
+        {globalSheet&&(
+          <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,zIndex:800}}>
+            {globalSheet}
+          </div>
+        )}
       </div>
     </PhoneMockup>
   );
@@ -1078,13 +1096,14 @@ export default function App() {
     </PhoneMockup>
   );
 
+  const gs = setGlobalSheet; // 단축
   const pages = {
     dash:     <DashPage orders={orders} products={products} onNav={setPage}/>,
     order:    <OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} user={user}/>,
-    prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
+    prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user} gs={gs}/>,
     list:     <ListPage orders={orders} setOrders={setOrders} products={products} user={user}/>,
-    vendors:  <VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
-    settings: <SettingsPage user={user} setUser={setUser} vendors={vendors} factories={factories} setFactories={setFactories} onLogout={handleLogout} onNav={setPage}/>,
+    vendors:  <VendorPage vendors={vendors} setVendors={setVendors} user={user} gs={gs}/>,
+    settings: <SettingsPage user={user} setUser={setUser} vendors={vendors} factories={factories} setFactories={setFactories} onLogout={handleLogout} onNav={setPage} gs={gs}/>,
   };
 
   return (
@@ -1094,7 +1113,7 @@ export default function App() {
           <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:19,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
           <span style={{color:C.sub,fontSize:12}}>{user.name}</span>
         </div>
-        <div style={{flex:1}}>{pages[page]||pages["dash"]}</div>
+        <div style={{flex:1,overflow:"visible",position:"relative",minHeight:0}}>{pages[page]||pages["dash"]}</div>
         <div style={{background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",flexShrink:0,zIndex:50}}>
           {tabs.map(t=>(
             <button key={t.k} onClick={()=>setPage(t.k)} style={{flex:1,padding:"9px 4px 9px",background:"none",border:"none",color:page===t.k?C.acc:C.sub,cursor:"pointer",fontFamily:C.fn,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
@@ -1105,6 +1124,11 @@ export default function App() {
             </button>
           ))}
         </div>
+        {globalSheet&&(
+          <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,zIndex:800}}>
+            {globalSheet}
+          </div>
+        )}
       </div>
     </PhoneMockup>
   );
