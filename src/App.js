@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 // ── Supabase ──────────────────────────────────────────────────
 const SB = "https://qimgostiseehdnvhmoph.supabase.co";
@@ -153,7 +153,7 @@ function StepBar({cur,total=4}) {
 
 function Sheet({title,onClose,children}) {
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",zIndex:900}} onClick={onClose}>
+    <div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"flex-end",zIndex:900}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
         background:"#fff",borderRadius:"20px 20px 0 0",padding:"0 20px 36px",
         width:"100%",maxHeight:"82%",overflowY:"auto",boxSizing:"border-box",fontFamily:C.fn
@@ -210,7 +210,7 @@ function PhoneMockup({children}) {
                 <span>▲▲▲</span><span>WiFi</span><span>🔋</span>
               </div>
             </div>
-            <div style={{position:"absolute",top:42,left:0,right:0,bottom:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch"}}>
+            <div id="phone-content" style={{position:"absolute",top:42,left:0,right:0,bottom:0,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch"}}>
               {children}
             </div>
           </div>
@@ -1089,7 +1089,7 @@ export default function App() {
 
   return (
     <PhoneMockup>
-      <div style={{minHeight:"100%",background:C.bg,fontFamily:C.fn,color:C.txt,display:"flex",flexDirection:"column",position:"relative"}}>
+      <div style={{minHeight:"100vh",height:"100%",background:C.bg,fontFamily:C.fn,color:C.txt,display:"flex",flexDirection:"column",position:"relative"}}>
         <div style={{background:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`,flexShrink:0}}>
           <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:19,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
           <span style={{color:C.sub,fontSize:12}}>{user.name}</span>
