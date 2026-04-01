@@ -1152,6 +1152,104 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
 }
 
 // ── 앱 루트 ───────────────────────────────────────────────────
+// ── 폰 목업 래퍼 ─────────────────────────────────────────────
+function PhoneMockup({children}) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  useEffect(()=>{
+    const fn = ()=>setIsMobile(window.innerWidth<=768);
+    window.addEventListener("resize",fn);
+    return()=>window.removeEventListener("resize",fn);
+  },[]);
+
+  // 모바일이면 그냥 전체화면
+  if (isMobile) return <>{children}</>;
+
+  // PC면 폰 목업 프레임
+  return (
+    <div style={{
+      minHeight:"100vh", background:"linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontFamily:"'Noto Sans KR',sans-serif", padding:"40px 20px"
+    }}>
+      {/* 배경 텍스트 */}
+      <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",zIndex:0}}>
+        <div style={{textAlign:"center",opacity:0.05}}>
+          <div style={{fontSize:120,fontWeight:900,color:"#fff",letterSpacing:4}}>D-Works</div>
+          <div style={{fontSize:24,color:"#fff",marginTop:8}}>의류 생산 발주 자동화 서비스</div>
+        </div>
+      </div>
+
+      {/* 폰 목업 */}
+      <div style={{position:"relative",zIndex:1}}>
+        {/* 폰 외관 */}
+        <div style={{
+          width:390, height:844,
+          background:"#1a1a1a",
+          borderRadius:54,
+          padding:"12px",
+          boxShadow:"0 0 0 2px #333, 0 30px 80px rgba(0,0,0,0.6), inset 0 0 0 2px #444",
+          position:"relative"
+        }}>
+          {/* 사이드 버튼들 */}
+          <div style={{position:"absolute",left:-3,top:120,width:3,height:32,background:"#333",borderRadius:"2px 0 0 2px"}}/>
+          <div style={{position:"absolute",left:-3,top:170,width:3,height:56,background:"#333",borderRadius:"2px 0 0 2px"}}/>
+          <div style={{position:"absolute",left:-3,top:240,width:3,height:56,background:"#333",borderRadius:"2px 0 0 2px"}}/>
+          <div style={{position:"absolute",right:-3,top:160,width:3,height:80,background:"#333",borderRadius:"0 2px 2px 0"}}/>
+
+          {/* 화면 영역 */}
+          <div style={{
+            width:"100%", height:"100%",
+            background:"#fff",
+            borderRadius:44,
+            overflow:"hidden",
+            position:"relative"
+          }}>
+            {/* 노치 */}
+            <div style={{
+              position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",
+              width:126,height:34,background:"#1a1a1a",
+              borderRadius:"0 0 20px 20px",zIndex:200
+            }}>
+              <div style={{position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",width:12,height:12,background:"#2a2a2a",borderRadius:"50%"}}/>
+            </div>
+            {/* 상태바 */}
+            <div style={{
+              position:"absolute",top:0,left:0,right:0,height:44,
+              display:"flex",alignItems:"flex-start",justifyContent:"space-between",
+              padding:"12px 20px 0",zIndex:100,pointerEvents:"none"
+            }}>
+              <span style={{fontSize:12,fontWeight:700,color:"#111"}}>9:41</span>
+              <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                <span style={{fontSize:11}}>▲▲▲</span>
+                <span style={{fontSize:11}}>WiFi</span>
+                <span style={{fontSize:11}}>🔋</span>
+              </div>
+            </div>
+            {/* 앱 콘텐츠 */}
+            <div style={{
+              position:"absolute",top:44,left:0,right:0,bottom:0,
+              overflowY:"auto", overflowX:"hidden",
+            }}>
+              {children}
+            </div>
+          </div>
+        </div>
+
+        {/* 하단 홈바 */}
+        <div style={{
+          position:"absolute",bottom:20,left:"50%",transform:"translateX(-50%)",
+          width:120,height:4,background:"rgba(255,255,255,0.3)",borderRadius:2
+        }}/>
+
+        {/* D-Works 라벨 */}
+        <div style={{textAlign:"center",marginTop:24,color:"rgba(255,255,255,0.6)",fontSize:14,fontWeight:600,letterSpacing:2}}>
+          D-Works MVP
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [screen, setScreen] = useState("splash"); // splash | auth | app
   const [user, setUser] = useState(null);
@@ -1161,8 +1259,8 @@ export default function App() {
   const [products, setProducts] = useState(IV.products);
   const [orders, setOrders] = useState(IV.orders);
 
-  if (screen==="splash") return <SplashScreen onStart={()=>setScreen("auth")}/>;
-  if (screen==="auth"||!user) return <AuthPage onLogin={u=>{setUser(u);setScreen("app");}}/>;
+  if (screen==="splash") return <PhoneMockup><SplashScreen onStart={()=>setScreen("auth")}/></PhoneMockup>;
+  if (screen==="auth"||!user) return <PhoneMockup><AuthPage onLogin={u=>{setUser(u);setScreen("app");}}/></PhoneMockup>;
 
   const tabs=[
     {k:"order",i:"📝",l:"발주하기"},
@@ -1182,13 +1280,14 @@ export default function App() {
   };
 
   return (
+    <PhoneMockup>
     <div style={{minHeight:"100vh",background:C.page,fontFamily:C.fn,color:C.txt}}>
       <div style={{background:"#fff",padding:"14px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:100,borderBottom:`1px solid ${C.bdr}`}}>
         <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:20,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
         <span style={{color:C.sub,fontSize:13}}>{user.name}</span>
       </div>
       <div style={{paddingBottom:80}}>{pages[page]||pages["dash"]}</div>
-      <div style={{position:"fixed",bottom:0,left:0,right:0,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:100}}>
+      <div style={{position:"sticky",bottom:0,left:0,right:0,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:100}}>
         {tabs.map(t=>(
           <button key={t.k} onClick={()=>setPage(t.k)} style={{
             flex:1,padding:"10px 4px 10px",background:"none",border:"none",
@@ -1203,5 +1302,6 @@ export default function App() {
         ))}
       </div>
     </div>
+    </PhoneMockup>
   );
 }
