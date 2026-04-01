@@ -1,4 +1,71 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+
+// ── Supabase ──────────────────────────────────────────────────
+const SB_URL = "https://qimgostiseehdnvhmoph.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
+
+const sb = {
+  headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json", "Prefer": "return=representation" },
+
+  // Auth
+  async signUp(email, pw, name, company, tel) {
+    const r = await fetch(`${SB_URL}/auth/v1/signup`, {
+      method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json"},
+      body: JSON.stringify({email, password:pw, data:{name,company,tel}})
+    });
+    return r.json();
+  },
+  async signIn(email, pw) {
+    const r = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
+      method:"POST", headers:{"apikey":SB_KEY,"Content-Type":"application/json"},
+      body: JSON.stringify({email, password:pw})
+    });
+    return r.json();
+  },
+  async signOut(token) {
+    await fetch(`${SB_URL}/auth/v1/logout`, {
+      method:"POST", headers:{...this.headers,"Authorization":`Bearer ${token}`}
+    });
+  },
+  async getUser(token) {
+    const r = await fetch(`${SB_URL}/auth/v1/user`, {
+      headers:{"apikey":SB_KEY,"Authorization":`Bearer ${token}`}
+    });
+    return r.json();
+  },
+  async updateProfile(token, data) {
+    await fetch(`${SB_URL}/auth/v1/user`, {
+      method:"PUT", headers:{"apikey":SB_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json"},
+      body: JSON.stringify({data})
+    });
+  },
+
+  // DB helpers
+  authHeaders(token) {
+    return {"apikey":SB_KEY,"Authorization":`Bearer ${token}`,"Content-Type":"application/json","Prefer":"return=representation"};
+  },
+  async getAll(token, table) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?order=created_at.asc`, {headers:this.authHeaders(token)});
+    return r.json();
+  },
+  async insert(token, table, data) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+      method:"POST", headers:this.authHeaders(token), body:JSON.stringify(data)
+    });
+    return r.json();
+  },
+  async update(token, table, id, data) {
+    const r = await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method:"PATCH", headers:this.authHeaders(token), body:JSON.stringify(data)
+    });
+    return r.json();
+  },
+  async remove(token, table, id) {
+    await fetch(`${SB_URL}/rest/v1/${table}?id=eq.${id}`, {
+      method:"DELETE", headers:this.authHeaders(token)
+    });
+  },
+};
 
 // ── EmailJS ───────────────────────────────────────────────────
 const EJS = {
@@ -365,13 +432,33 @@ function AuthPage({onLogin}) {
   const [tab, setTab] = useState("in");
   const [f, setF] = useState({name:"",company:"",email:"",pw:"",pw2:"",tel:""});
   const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
   const sf = k => v => setF(p=>({...p,[k]:v}));
 
-  function submit() {
+  async function submit() {
     if (!f.email||!f.pw) { setErr("이메일과 비밀번호를 입력하세요"); return; }
     if (tab==="up"&&!f.name) { setErr("이름을 입력하세요"); return; }
     if (tab==="up"&&f.pw!==f.pw2) { setErr("비밀번호가 일치하지 않습니다"); return; }
-    onLogin({id:uid(),name:f.name||f.email.split("@")[0],company:f.company,email:f.email,tel:f.tel});
+    if (tab==="up"&&f.pw.length<6) { setErr("비밀번호는 6자 이상이어야 합니다"); return; }
+    setLoading(true); setErr("");
+    try {
+      if (tab==="up") {
+        const r = await sb.signUp(f.email, f.pw, f.name, f.company, f.tel);
+        if (r.error) { setErr(r.error.message==="User already registered"?"이미 가입된 이메일입니다":r.error.message); return; }
+        // 가입 후 바로 로그인
+        const r2 = await sb.signIn(f.email, f.pw);
+        if (r2.error) { setErr("가입 완료! 로그인해주세요"); setTab("in"); return; }
+        const u = r2.user||r2;
+        onLogin({token:r2.access_token, id:u.id, name:f.name, company:f.company, email:f.email, tel:f.tel});
+      } else {
+        const r = await sb.signIn(f.email, f.pw);
+        if (r.error) { setErr(r.error.message==="Invalid login credentials"?"이메일 또는 비밀번호가 틀렸습니다":r.error.message); return; }
+        const u = r.user||r;
+        const meta = u.user_metadata||{};
+        onLogin({token:r.access_token, id:u.id, name:meta.name||f.email.split("@")[0], company:meta.company||"", email:u.email, tel:meta.tel||""});
+      }
+    } catch(e) { setErr("네트워크 오류가 발생했습니다"); }
+    finally { setLoading(false); }
   }
 
   return (
@@ -422,7 +509,7 @@ function AuthPage({onLogin}) {
 
         {err && <div style={{color:C.red,fontSize:13,marginBottom:12,padding:"10px 14px",background:"#FFF5F5",borderRadius:8,border:"1px solid #FECACA"}}>{err}</div>}
 
-        <Btn ch={tab==="in"?"로그인":"가입하기"} onClick={submit} full sz="l" st={{borderRadius:10,height:52,fontSize:16}}/>
+        <Btn ch={loading?(tab==="in"?"로그인 중...":"가입 중..."):(tab==="in"?"로그인":"가입하기")} onClick={submit} full sz="l" disabled={loading} st={{borderRadius:10,height:52,fontSize:16}}/>
 
         {tab==="in"&&<div style={{textAlign:"center",marginTop:16,color:C.sub,fontSize:13}}>
           계정이 없으신가요? <span onClick={()=>setTab("up")} style={{color:C.acc,fontWeight:700,cursor:"pointer"}}>회원가입</span>
@@ -506,7 +593,7 @@ function DashPage({orders, products, onNav}) {
 }
 
 // ── 4. 발주 입력 ──────────────────────────────────────────────
-function OrderPage({products, orders, setOrders, vendors}) {
+function OrderPage({products, orders, setOrders, setOrdersDB, vendors, user}) {
   const [step, setStep] = useState(1);
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
@@ -525,9 +612,16 @@ function OrderPage({products, orders, setOrders, vendors}) {
     setSelProd(null); setSelColor(""); setQty(""); setSearch("");
   }
 
-  function submit() {
+  async function submit() {
     if (!items.length) { alert("발주 항목을 추가해주세요"); return; }
-    setOrders(p=>[...p,{id:uid(),items,status:"진행중",date:today(),ts:new Date().toISOString()}]);
+    const newOrder = {items, status:"진행중", date:today(), ts:new Date().toISOString()};
+    if (setOrdersDB && user?.token) {
+      const r = await fetch(`${SB_URL}/rest/v1/orders`,{method:"POST",headers:{...sb.authHeaders(user.token)},body:JSON.stringify({...newOrder,user_id:user.id})});
+      const nr = await r.json();
+      setOrders(p=>[...p, Array.isArray(nr)?nr[0]:{...newOrder,id:uid()}]);
+    } else {
+      setOrders(p=>[...p,{...newOrder,id:uid()}]);
+    }
     setStep(3);
   }
 
@@ -708,7 +802,7 @@ function OrderPage({products, orders, setOrders, vendors}) {
 }
 
 // ── 5. 상품 관리 ──────────────────────────────────────────────
-function ProdsPage({products, setProducts, vendors, factories}) {
+function ProdsPage({products, setProducts, setProductsDB, vendors, factories}) {
   const [catF, setCatF] = useState("전체");
   const [sheet, setSheet] = useState(false);
   const [f, setF] = useState({name:"",category:"",season:"26SS",factory:"",colors:[],bom:[]});
@@ -734,7 +828,17 @@ function ProdsPage({products, setProducts, vendors, factories}) {
     }
     setBr({type:"",mat:"",amt:"",price:"",vid:""});
   }
-  function save() { if(!f.name)return; setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]); setSheet(false); }
+  async function save() {
+    if(!f.name)return;
+    if(f.id) {
+      if(setProductsDB&&window._sbUser?.token) { await fetch(`${SB_URL}/rest/v1/products?id=eq.${f.id}`,{method:"PATCH",headers:{...sb.authHeaders(window._sbUser.token)},body:JSON.stringify(f)}); }
+      setProducts(products.map(p=>p.id===f.id?f:p));
+    } else {
+      if(setProductsDB&&window._sbUser?.token) { const r=await fetch(`${SB_URL}/rest/v1/products`,{method:"POST",headers:{...sb.authHeaders(window._sbUser.token)},body:JSON.stringify({...f,id:undefined,user_id:window._sbUser.id})}); const nr=await r.json(); setProducts(p=>[...p,Array.isArray(nr)?nr[0]:{...f,id:uid()}]); setSheet(false); return; }
+      setProducts(p=>[...p,{...f,id:uid()}]);
+    }
+    setSheet(false);
+  }
   function del(id) { if(window.confirm("삭제?")) setProducts(products.filter(p=>p.id!==id)); }
 
   return (
@@ -925,7 +1029,7 @@ function ProdsPage({products, setProducts, vendors, factories}) {
 }
 
 // ── 6. 발주 리스트 ────────────────────────────────────────────
-function ListPage({orders, setOrders, products}) {
+function ListPage({orders, setOrders, setOrdersDB, products}) {
   const [filter, setFilter] = useState("전체");
   const [open, setOpen] = useState(null);
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
@@ -988,7 +1092,7 @@ function ListPage({orders, setOrders, products}) {
 
 // ── 7. 환경설정 ───────────────────────────────────────────────
 // ── 거래처 페이지 ────────────────────────────────────────────
-function VendorPage({vendors, setVendors}) {
+function VendorPage({vendors, setVendors, setVendorsDB}) {
   const [sheet, setSheet] = useState(false);
   const [f, setF] = useState({name:"",tel:"",email:"",type:"원단"});
   const [editId, setEditId] = useState(null);
@@ -1060,16 +1164,37 @@ function VendorPage({vendors, setVendors}) {
   );
 }
 
-function SettingsPage({user, vendors, setVendors, factories, setFactories, onLogout, onNav}) {
-  const [sheet, setSheet] = useState(false);
+function SettingsPage({user, vendors, factories, setFactoriesDB, onLogout, onNav}) {
   const [facSheet, setFacSheet] = useState(null);
-  const [f, setF] = useState({name:"",tel:"",email:"",type:"원단"});
-  const [editId, setEditId] = useState(null);
-  const sf=k=>v=>setF(p=>({...p,[k]:v}));
+  const [profileSheet, setProfileSheet] = useState(false);
+  const [pf, setPf] = useState({name:user.name||"", company:user.company||"", tel:user.tel||""});
 
-  function openAdd() { setF({name:"",tel:"",email:"",type:"원단"}); setEditId(null); setSheet(true); }
-  function openEdit(v) { setF({...v}); setEditId(v.id); setSheet(true); }
-  function save() { if(!f.name)return; setVendors(editId?vendors.map(v=>v.id===editId?{...f,id:editId}:v):[...vendors,{...f,id:uid()}]); setSheet(false); }
+  async function saveProfile() {
+    await sb.updateProfile(user.token, {name:pf.name, company:pf.company, tel:pf.tel});
+    Object.assign(user, pf);
+    setProfileSheet(false);
+    alert("프로필이 저장되었습니다!");
+  }
+
+  async function saveFac() {
+    if(!facSheet.name) return;
+    const {id,...data} = facSheet;
+    if(id) {
+      await fetch(`${SB_URL}/rest/v1/factories?id=eq.${id}`,{method:"PATCH",headers:{...sb.authHeaders(user.token)},body:JSON.stringify(data)});
+      setFactoriesDB?.set(ff=>ff.map(x=>x.id===id?{...x,...data}:x));
+    } else {
+      const r = await fetch(`${SB_URL}/rest/v1/factories`,{method:"POST",headers:{...sb.authHeaders(user.token)},body:JSON.stringify({...data,user_id:user.id})});
+      const nr = await r.json();
+      setFactoriesDB?.set(ff=>[...ff, Array.isArray(nr)?nr[0]:{...data,id:uid()}]);
+    }
+    setFacSheet(null);
+  }
+
+  async function delFac(id) {
+    if(!window.confirm("삭제하시겠습니까?")) return;
+    await fetch(`${SB_URL}/rest/v1/factories?id=eq.${id}`,{method:"DELETE",headers:{...sb.authHeaders(user.token)}});
+    setFactoriesDB?.set(ff=>ff.filter(x=>x.id!==id));
+  }
 
   return (
     <div style={{padding:"16px 16px 90px"}}>
@@ -1077,11 +1202,13 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
       <Card st={{marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{width:46,height:46,borderRadius:23,background:C.acc+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>👤</div>
-          <div>
-            <div style={{fontWeight:800,fontSize:15}}>{user.name}</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:800,fontSize:15}}>{user.name||"이름 없음"}</div>
             <div style={{color:C.sub,fontSize:13,marginTop:2}}>{user.email}</div>
             {user.company&&<div style={{color:C.sub,fontSize:12}}>{user.company}</div>}
+            {user.tel&&<div style={{color:C.sub,fontSize:12}}>{user.tel}</div>}
           </div>
+          <Btn ch="수정" v="w" sz="s" st={{padding:"6px 12px"}} onClick={()=>setProfileSheet(true)}/>
         </div>
         <Divider/>
         <Btn ch="로그아웃" v="w" full st={{color:C.red}} onClick={onLogout}/>
@@ -1108,7 +1235,7 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
               </div>
               <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
                 <Btn ch="수정" v="w" sz="s" st={{padding:"5px 10px",fontSize:12}} onClick={()=>setFacSheet({...fc})}/>
-                <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 10px",fontSize:12,color:C.red}} onClick={()=>{if(window.confirm("삭제?"))setFactories(ff=>ff.filter(x=>x.id!==fc.id));}}/>
+                <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 10px",fontSize:12,color:C.red}} onClick={()=>delFac(fc.id)}/>
               </div>
             </div>
           </div>
@@ -1140,8 +1267,7 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
             <Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setFacSheet(null)}/>
             <Btn ch="저장" full st={{flex:2}} onClick={()=>{
               if(!facSheet.name)return;
-              setFactories(facSheet.id?ff=>ff.map(x=>x.id===facSheet.id?facSheet:x):ff=>[...ff,{...facSheet,id:uid()}]);
-              setFacSheet(null);
+              saveFac();
             }}/>
           </div>
         </Sheet>
@@ -1274,16 +1400,101 @@ function PhoneMockup({children}) {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState("splash"); // splash | auth | app
+  const [screen, setScreen] = useState("splash");
   const [user, setUser] = useState(null);
   const [page, setPage] = useState("dash");
-  const [vendors, setVendors] = useState(IV.vendors);
-  const [factories, setFactories] = useState(INIT_FACTORIES);
-  const [products, setProducts] = useState(IV.products);
-  const [orders, setOrders] = useState(IV.orders);
+  const [vendors, setVendors] = useState([]);
+  const [factories, setFactories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [dbLoading, setDbLoading] = useState(false);
+
+  // DB에서 데이터 로드
+  const loadData = useCallback(async (token) => {
+    setDbLoading(true);
+    try {
+      const [v,f,p,o] = await Promise.all([
+        sb.getAll(token,"vendors"),
+        sb.getAll(token,"factories"),
+        sb.getAll(token,"products"),
+        sb.getAll(token,"orders"),
+      ]);
+      setVendors(Array.isArray(v)?v:[]);
+      setFactories(Array.isArray(f)?f:[]);
+      setProducts(Array.isArray(p)?p:[]);
+      setOrders(Array.isArray(o)?o:[]);
+    } catch(e) { console.error("loadData error",e); }
+    finally { setDbLoading(false); }
+  },[]);
+
+  // DB 저장 helpers
+  const dbAdd = async (table, data, setter) => {
+    const r = await sb.insert(user.token, table, {...data, user_id:user.id, id:undefined});
+    if (Array.isArray(r)&&r[0]) setter(prev=>[...prev, r[0]]);
+    else setter(prev=>[...prev, data]);
+  };
+  const dbUpdate = async (table, id, data, setter) => {
+    await sb.update(user.token, table, id, data);
+    setter(prev=>prev.map(x=>x.id===id?{...x,...data}:x));
+  };
+  const dbRemove = async (table, id, setter) => {
+    await sb.remove(user.token, table, id);
+    setter(prev=>prev.filter(x=>x.id!==id));
+  };
+
+  // vendors CRUD
+  const setVendorsDB = {
+    add: (data) => dbAdd("vendors", data, setVendors),
+    update: (id, data) => dbUpdate("vendors", id, data, setVendors),
+    remove: (id) => dbRemove("vendors", id, setVendors),
+    set: setVendors,
+  };
+  const setFactoriesDB = {
+    add: (data) => dbAdd("factories", data, setFactories),
+    update: (id, data) => dbUpdate("factories", id, data, setFactories),
+    remove: (id) => dbRemove("factories", id, setFactories),
+    set: setFactories,
+  };
+  const setProductsDB = {
+    add: (data) => dbAdd("products", data, setProducts),
+    update: (id, data) => dbUpdate("products", id, data, setProducts),
+    remove: (id) => dbRemove("products", id, setProducts),
+    set: setProducts,
+  };
+  const setOrdersDB = {
+    add: (data) => dbAdd("orders", data, setOrders),
+    update: (id, data) => dbUpdate("orders", id, data, setOrders),
+    remove: (id) => dbRemove("orders", id, setOrders),
+    set: setOrders,
+  };
+
+  async function handleLogin(u) {
+    setUser(u);
+    window._sbToken = u.token;
+    window._sbUser = u;
+    setScreen("app");
+    await loadData(u.token);
+  }
+
+  async function handleLogout() {
+    if (user?.token) await sb.signOut(user.token);
+    setUser(null); setScreen("auth");
+    setVendors([]); setFactories([]); setProducts([]); setOrders([]);
+  }
 
   if (screen==="splash") return <PhoneMockup><SplashScreen onStart={()=>setScreen("auth")}/></PhoneMockup>;
-  if (screen==="auth"||!user) return <PhoneMockup><AuthPage onLogin={u=>{setUser(u);setScreen("app");}}/></PhoneMockup>;
+  if (screen==="auth"||!user) return <PhoneMockup><AuthPage onLogin={handleLogin}/></PhoneMockup>;
+
+  if (dbLoading) return (
+    <PhoneMockup>
+      <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#fff",fontFamily:C.fn}}>
+        <div style={{fontSize:32,fontWeight:900,color:C.acc,marginBottom:16}}>D-Works</div>
+        <div style={{color:C.sub,fontSize:14}}>데이터 불러오는 중...</div>
+        <div style={{marginTop:24,width:40,height:40,border:`3px solid ${C.bdr}`,borderTop:`3px solid ${C.acc}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
+        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      </div>
+    </PhoneMockup>
+  );
 
   const tabs=[
     {k:"order",i:"📝",l:"발주하기"},
@@ -1295,11 +1506,11 @@ export default function App() {
 
   const pages={
     dash:     <DashPage orders={orders} products={products} onNav={setPage}/>,
-    order:    <OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors}/>,
-    prods:    <ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories}/>,
-    list:     <ListPage orders={orders} setOrders={setOrders} products={products}/>,
-    vendors:  <VendorPage vendors={vendors} setVendors={setVendors}/>,
-    settings: <SettingsPage user={user} vendors={vendors} setVendors={setVendors} factories={factories} setFactories={setFactories} onLogout={()=>{setUser(null);setScreen("auth");}} onNav={setPage}/>,
+    order:    <OrderPage products={products} orders={orders} setOrders={setOrders} setOrdersDB={setOrdersDB} vendors={vendors} user={user}/>,
+    prods:    <ProdsPage products={products} setProducts={setProducts} setProductsDB={setProductsDB} vendors={vendors} factories={factories}/>,
+    list:     <ListPage orders={orders} setOrders={setOrders} setOrdersDB={setOrdersDB} products={products}/>,
+    vendors:  <VendorPage vendors={vendors} setVendors={setVendors} setVendorsDB={setVendorsDB}/>,
+    settings: <SettingsPage user={user} vendors={vendors} factories={factories} setFactoriesDB={setFactoriesDB} onLogout={handleLogout} onNav={setPage}/>,
   };
 
   return (
