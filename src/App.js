@@ -674,13 +674,25 @@ function ProdsPage({products, setProducts, vendors}) {
   const [f, setF] = useState({name:"",category:"",season:"26SS",factory:"",colors:[],bom:[]});
   const [ci, setCi] = useState("");
   const [br, setBr] = useState({mat:"",amt:"",price:"",vid:""});
+  const [editBomId, setEditBomId] = useState(null); // 수정 중인 BOM id
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered = catF==="전체"?products:products.filter(p=>p.category===catF);
 
   function openAdd() { setF({name:"",category:"",season:"26SS",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({mat:"",amt:"",price:"",vid:""}); setSheet(true); }
   function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({mat:"",amt:"",price:"",vid:""}); setSheet(true); }
   function addColor() { const c=ci.trim(); if(!c||f.colors.includes(c))return; setF(p=>({...p,colors:[...p.colors,c]})); setCi(""); }
-  function addBom() { if(!br.mat||!br.amt)return; setF(p=>({...p,bom:[...p.bom,{...br,id:uid(),amt:Number(br.amt),price:Number(br.price)}]})); setBr({mat:"",amt:"",price:"",vid:""}); }
+  function addBom() {
+    if(!br.mat||!br.amt) return;
+    if (editBomId) {
+      // 수정 모드
+      setF(p=>({...p,bom:p.bom.map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt),price:Number(br.price)}:b)}));
+      setEditBomId(null);
+    } else {
+      // 추가 모드
+      setF(p=>({...p,bom:[...p.bom,{...br,id:uid(),amt:Number(br.amt),price:Number(br.price)}]}));
+    }
+    setBr({mat:"",amt:"",price:"",vid:""});
+  }
   function save() { if(!f.name)return; setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]); setSheet(false); }
   function del(id) { if(window.confirm("삭제?")) setProducts(products.filter(p=>p.id!==id)); }
 
@@ -767,13 +779,31 @@ function ProdsPage({products, setProducts, vendors}) {
               {vendors.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
             </DropSel>
           </Field>
-          {f.bom.length>0&&f.bom.map(b=>(
-            <div key={b.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:C.page,borderRadius:8,padding:"9px 12px",marginBottom:6}}>
-              <div><span style={{fontWeight:600,fontSize:13}}>{b.mat}</span><span style={{color:C.sub,fontSize:11,marginLeft:8}}>{b.amt}yd · {fmtN(b.price)}원</span></div>
-              <button onClick={()=>setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:16}}>✕</button>
-            </div>
-          ))}
-          <Btn ch="+ 원단 추가" v="w" full st={{marginBottom:20}} onClick={addBom}/>
+          {f.bom.length>0&&f.bom.map(b=>{
+            const ven=vendors.find(v=>v.id===b.vid);
+            const isEditing=editBomId===b.id;
+            return (
+              <div key={b.id} style={{background:isEditing?C.acc+"10":C.page,borderRadius:8,padding:"10px 12px",marginBottom:6,border:`1.5px solid ${isEditing?C.acc:C.bdr}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <span style={{fontWeight:700,fontSize:13}}>{b.mat}</span>
+                    <span style={{color:C.sub,fontSize:11,marginLeft:8}}>{b.amt}yd</span>
+                    {ven&&<span style={{color:C.sub,fontSize:11,marginLeft:6}}>· {ven.name}</span>}
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>{
+                      if(isEditing){setEditBomId(null);setBr({mat:"",amt:"",price:"",vid:""});}
+                      else{setEditBomId(b.id);setBr({mat:b.mat,amt:String(b.amt),price:String(b.price||""),vid:b.vid||""});}
+                    }} style={{background:"none",border:"none",color:isEditing?C.acc:C.sub,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:C.fn}}>
+                      {isEditing?"취소":"수정"}
+                    </button>
+                    <button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isEditing){setEditBomId(null);setBr({mat:"",amt:"",price:"",vid:""});}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <Btn ch={editBomId?"✓ 수정 완료":"+ 원단 추가"} v={editBomId?"p":"w"} full st={{marginBottom:20}} onClick={addBom}/>
           <div style={{display:"flex",gap:10}}>
             <Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/>
             <Btn ch="저장" full st={{flex:2}} onClick={save} disabled={!f.name}/>
