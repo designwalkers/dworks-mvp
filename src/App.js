@@ -195,12 +195,12 @@ function PhoneMockup({children}) {
   return (
     <div style={{minHeight:"100vh",height:"100vh",background:"linear-gradient(135deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",fontFamily:C.fn}}>
       <div style={{position:"relative"}}>
-        <div style={{width:375,height:812,background:"#1a1a1a",borderRadius:50,padding:"10px",boxShadow:"0 0 0 2px #444,0 40px 100px rgba(0,0,0,0.7)",position:"relative",flexShrink:0}}>
+        <div style={{width:375,height:812,background:"#1a1a1a",borderRadius:50,padding:"10px",boxShadow:"0 0 0 2px #444,0 40px 100px rgba(0,0,0,0.7)",position:"relative",flexShrink:0,overflow:"hidden"}}>
           <div style={{position:"absolute",left:-3,top:110,width:3,height:30,background:"#333",borderRadius:"2px 0 0 2px"}}/>
           <div style={{position:"absolute",left:-3,top:160,width:3,height:54,background:"#333",borderRadius:"2px 0 0 2px"}}/>
           <div style={{position:"absolute",left:-3,top:228,width:3,height:54,background:"#333",borderRadius:"2px 0 0 2px"}}/>
           <div style={{position:"absolute",right:-3,top:150,width:3,height:78,background:"#333",borderRadius:"0 2px 2px 0"}}/>
-          <div style={{width:"100%",height:"100%",background:"#fff",borderRadius:42,overflow:"hidden",position:"relative",transform:"translateZ(0)",isolation:"isolate"}}>
+          <div style={{width:"100%",height:"100%",background:"#fff",borderRadius:42,position:"relative",transform:"translateZ(0)",isolation:"isolate"}}>
             <div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:120,height:32,background:"#1a1a1a",borderRadius:"0 0 18px 18px",zIndex:200}}>
               <div style={{position:"absolute",top:9,left:"50%",transform:"translateX(-50%)",width:11,height:11,background:"#2a2a2a",borderRadius:"50%"}}/>
             </div>
