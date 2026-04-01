@@ -746,32 +746,34 @@ function ProdsPage({products, setProducts, vendors, factories}) {
       {sheet&&(
         <Sheet title={f.id?"상품 수정":"1단계 원단 입력"} onClose={()=>setSheet(false)}>
           <StepBar cur={0}/>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>기본 정보</div>
+
+          {/* 1. 상품명 */}
           <Field label="상품명" req><TxtInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></Field>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Field label="시즌"><DropSel val={f.season} onChange={sf("season")}>{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</DropSel></Field>
-            <Field label="입고처(공장)">
-              <DropSel val={f.factoryId||""} onChange={v=>{
-                const fc=factories.find(x=>x.id===v);
-                setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));
-              }}>
-                <option value="">공장 선택</option>
-                {factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}
-              </DropSel>
-            </Field>
-          </div>
-          <Field label="입고처 연락처">
-            <TxtInp val={f.factoryTel||""} onChange={sf("factoryTel")} ph="자동입력 또는 직접입력" type="tel"/>
+
+          {/* 2. 시즌 */}
+          <Field label="시즌">
+            <DropSel val={f.season} onChange={sf("season")}>{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</DropSel>
           </Field>
+
+          {/* 3. 카테고리 */}
           <Field label="카테고리">
             <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
               {CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}
             </div>
           </Field>
-          <Divider/>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>부자재 정보</div>
 
-          {/* 부자재 타입 선택 */}
+          <Divider/>
+
+          {/* 4. 원부자재 업체명 */}
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>부자재 정보</div>
+          <Field label="원부자재 업체명">
+            <DropSel val={br.vid} onChange={v=>setBr(r=>({...r,vid:v}))}>
+              <option value="">업체명 선택</option>
+              {vendors.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+            </DropSel>
+          </Field>
+
+          {/* 5. 부자재 유형 */}
           <Field label="부자재 유형">
             <div style={{display:"flex",flexWrap:"wrap",gap:7,paddingBottom:4}}>
               {["메인원단","부속원단","단추","지퍼","안감","심지","기타"].map(t=>{
@@ -787,30 +789,43 @@ function ProdsPage({products, setProducts, vendors, factories}) {
             </div>
           </Field>
 
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <Field label="품목명"><TxtInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/></Field>
-            <Field label="색상">
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
-                {f.colors.map(c=><span key={c} style={{background:C.page,borderRadius:20,padding:"3px 8px",fontSize:11,display:"flex",alignItems:"center",gap:4,border:`1px solid ${C.bdr}`}}>
-                  {c}<button onClick={()=>setF(p=>({...p,colors:p.colors.filter(x=>x!==c)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>✕</button>
-                </span>)}
-              </div>
-              <div style={{display:"flex",gap:6}}>
-                <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상 추가" style={{flex:1,border:`1px solid ${C.bdr}`,borderRadius:6,padding:"7px 10px",fontSize:12,fontFamily:C.fn,outline:"none"}}/>
-                <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.fn}}>+</button>
-              </div>
-            </Field>
-            <Field label="소요량"><TxtInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/></Field>
-          </div>
+          {/* 6. 품목명 */}
+          <Field label="품목명"><TxtInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/></Field>
+
+          {/* 7. 색상 */}
+          <Field label="색상">
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+              {f.colors.map(c=><span key={c} style={{background:C.page,borderRadius:20,padding:"3px 8px",fontSize:11,display:"flex",alignItems:"center",gap:4,border:`1px solid ${C.bdr}`}}>
+                {c}<button onClick={()=>setF(p=>({...p,colors:p.colors.filter(x=>x!==c)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:11,lineHeight:1,padding:0}}>✕</button>
+              </span>)}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상 추가" style={{flex:1,border:`1px solid ${C.bdr}`,borderRadius:6,padding:"7px 10px",fontSize:12,fontFamily:C.fn,outline:"none"}}/>
+              <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.fn}}>+</button>
+            </div>
+          </Field>
+
+          {/* 8. 소요량 */}
+          <Field label="소요량"><TxtInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/></Field>
 
           <Divider/>
-          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>업체 정보</div>
-          <Field label="업체명">
-            <DropSel val={br.vid} onChange={v=>setBr(r=>({...r,vid:v}))}>
-              <option value="">업체명 선택</option>
-              {vendors.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
+
+          {/* 9. 입고처 - 맨 하단 */}
+          <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>입고처 정보</div>
+          <Field label="입고처(공장)">
+            <DropSel val={f.factoryId||""} onChange={v=>{
+              const fc=factories.find(x=>x.id===v);
+              setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));
+            }}>
+              <option value="">공장 선택</option>
+              {factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}
             </DropSel>
           </Field>
+          {f.factory&&(
+            <div style={{background:C.page,borderRadius:8,padding:"10px 14px",fontSize:13,color:C.sub2,marginBottom:8}}>
+              📞 {f.factoryTel||"연락처 없음"} · 발주서에 자동 포함됩니다
+            </div>
+          )}
           {f.bom.length>0&&f.bom.map(b=>{
             const ven=vendors.find(v=>v.id===b.vid);
             const isEditing=editBomId===b.id;
