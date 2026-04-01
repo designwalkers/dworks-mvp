@@ -444,20 +444,31 @@ function AuthPage({onLogin}) {
     try {
       if (tab==="up") {
         const r = await sb.signUp(f.email, f.pw, f.name, f.company, f.tel);
-        if (r.error) { setErr(r.error.message==="User already registered"?"이미 가입된 이메일입니다":r.error.message); return; }
-        // 가입 후 바로 로그인
+        if (r.error||!r.user) {
+          const msg = r.error?.message||"가입 실패";
+          setErr(msg==="User already registered"?"이미 가입된 이메일입니다":msg);
+          return;
+        }
         const r2 = await sb.signIn(f.email, f.pw);
-        if (r2.error) { setErr("가입 완료! 로그인해주세요"); setTab("in"); return; }
-        const u = r2.user||r2;
-        onLogin({token:r2.access_token, id:u.id, name:f.name, company:f.company, email:f.email, tel:f.tel});
+        if (r2.error||!r2.access_token) { setErr("가입 완료! 로그인해주세요"); setTab("in"); return; }
+        const u = r2.user;
+        const meta = u?.user_metadata||{};
+        onLogin({token:r2.access_token, id:u.id, name:f.name||meta.name||f.email.split("@")[0], company:f.company||meta.company||"", email:u.email, tel:f.tel||meta.tel||""});
       } else {
         const r = await sb.signIn(f.email, f.pw);
-        if (r.error) { setErr(r.error.message==="Invalid login credentials"?"이메일 또는 비밀번호가 틀렸습니다":r.error.message); return; }
-        const u = r.user||r;
-        const meta = u.user_metadata||{};
+        // 반드시 access_token이 있어야 로그인 성공
+        if (!r.access_token) {
+          const msg = r.error?.message||r.msg||"로그인 실패";
+          if (msg.includes("Invalid login credentials")||msg.includes("invalid")) setErr("이메일 또는 비밀번호가 틀렸습니다");
+          else if (msg.includes("Email not confirmed")) setErr("이메일 인증이 필요합니다. Supabase에서 이메일 인증을 비활성화해주세요.");
+          else setErr(msg||"로그인에 실패했습니다");
+          return;
+        }
+        const u = r.user;
+        const meta = u?.user_metadata||{};
         onLogin({token:r.access_token, id:u.id, name:meta.name||f.email.split("@")[0], company:meta.company||"", email:u.email, tel:meta.tel||""});
       }
-    } catch(e) { setErr("네트워크 오류가 발생했습니다"); }
+    } catch(e) { console.error(e); setErr("네트워크 오류: "+e.message); }
     finally { setLoading(false); }
   }
 
