@@ -703,12 +703,13 @@ function ProdsPage({products, setProducts, vendors, factories}) {
   const [f, setF] = useState({name:"",category:"",season:"26SS",factory:"",colors:[],bom:[]});
   const [ci, setCi] = useState("");
   const [br, setBr] = useState({type:"",mat:"",amt:"",vid:""});
-  const [editBomId, setEditBomId] = useState(null); // 수정 중인 BOM id
+  const [editBomId, setEditBomId] = useState(null);
+  const [venSearch, setVenSearch] = useState(""); // 수정 중인 BOM id
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered = catF==="전체"?products:products.filter(p=>p.category===catF);
 
-  function openAdd() { setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setSheet(true); }
-  function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setSheet(true); }
+  function openAdd() { setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setVenSearch(""); setSheet(true); }
+  function openEdit(p) { setF({...p,colors:[...p.colors],bom:p.bom.map(b=>({...b}))}); setCi(""); setBr({type:"",mat:"",amt:"",vid:""}); setVenSearch(""); setSheet(true); }
   function addColor() { const c=ci.trim(); if(!c||f.colors.includes(c))return; setF(p=>({...p,colors:[...p.colors,c]})); setCi(""); }
   function addBom() {
     if(!br.mat||!br.amt) return;
@@ -788,13 +789,43 @@ function ProdsPage({products, setProducts, vendors, factories}) {
 
           <Divider/>
 
-          {/* 4. 원부자재 업체명 */}
+          {/* 4. 원부자재 업체명 - 검색 */}
           <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>부자재 정보</div>
           <Field label="원부자재 업체명">
-            <DropSel val={br.vid} onChange={v=>setBr(r=>({...r,vid:v}))}>
-              <option value="">업체명 선택</option>
-              {vendors.map(v=><option key={v.id} value={v.id}>{v.name}</option>)}
-            </DropSel>
+            <div style={{position:"relative"}}>
+              <div style={{display:"flex",alignItems:"center",border:`1px solid ${br.vid?C.acc:C.bdr}`,borderRadius:8,background:"#fff",overflow:"hidden"}}>
+                <input
+                  value={venSearch}
+                  onChange={e=>{
+                    setVenSearch(e.target.value);
+                    if(!e.target.value) setBr(r=>({...r,vid:""}));
+                  }}
+                  placeholder="업체명 검색"
+                  style={{flex:1,border:"none",outline:"none",padding:"13px 14px",fontSize:14,color:C.txt,fontFamily:C.fn,background:"transparent"}}
+                />
+                {br.vid && <span style={{padding:"0 12px",color:C.ok,fontSize:16}}>✓</span>}
+                {venSearch && <button onClick={()=>{setVenSearch("");setBr(r=>({...r,vid:""}));}} style={{padding:"0 12px",background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:16}}>✕</button>}
+              </div>
+              {/* 검색 결과 드롭다운 */}
+              {venSearch && !br.vid && (()=>{
+                const filtered = vendors.filter(v=>v.name.includes(venSearch)||v.type.includes(venSearch));
+                return filtered.length>0?(
+                  <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:50,boxShadow:"0 4px 16px rgba(0,0,0,0.1)",maxHeight:160,overflowY:"auto"}}>
+                    {filtered.map(v=>(
+                      <div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}}
+                        style={{padding:"11px 14px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontWeight:600,fontSize:14}}>{v.name}</span>
+                        <Tag ch={v.type} c={VEN_C[v.type]||C.sub}/>
+                      </div>
+                    ))}
+                  </div>
+                ):venSearch.length>0?(
+                  <div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:50,padding:"12px 14px",fontSize:13,color:C.sub}}>
+                    검색 결과가 없습니다
+                  </div>
+                ):null;
+              })()}
+            </div>
           </Field>
 
           {/* 5. 부자재 유형 */}
@@ -863,12 +894,17 @@ function ProdsPage({products, setProducts, vendors, factories}) {
                   </div>
                   <div style={{display:"flex",gap:6}}>
                     <button onClick={()=>{
-                      if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});}
-                      else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||""});}
+                      if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}
+                      else{
+                      setEditBomId(b.id);
+                      setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||""});
+                      const ev=vendors.find(v=>v.id===b.vid);
+                      setVenSearch(ev?.name||"");
+                    }
                     }} style={{background:"none",border:"none",color:isEditing?C.acc:C.sub,cursor:"pointer",fontSize:13,fontWeight:700,fontFamily:C.fn}}>
                       {isEditing?"취소":"수정"}
                     </button>
-                    <button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button>
+                    <button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isEditing){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button>
                   </div>
                 </div>
               </div>
