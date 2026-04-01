@@ -1023,14 +1023,21 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
         </div>
         {factories.length===0?<div style={{textAlign:"center",padding:"14px 0",color:C.sub,fontSize:13}}>등록된 공장이 없습니다</div>:
         factories.map(fc=>(
-          <div key={fc.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.bdr}`}}>
-            <div>
-              <div style={{fontWeight:700,fontSize:13}}>{fc.name}</div>
-              <div style={{color:C.sub,fontSize:12,marginTop:1}}>{fc.tel||"연락처 없음"}</div>
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <Btn ch="수정" v="w" sz="s" st={{padding:"5px 10px",fontSize:12}} onClick={()=>setFacSheet({...fc})}/>
-              <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 10px",fontSize:12,color:C.red}} onClick={()=>{if(window.confirm("삭제?"))setFactories(ff=>ff.filter(x=>x.id!==fc.id));}}/>
+          <div key={fc.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.bdr}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <span style={{fontWeight:700,fontSize:14}}>{fc.name}</span>
+                  {fc.bizType&&<Tag ch={fc.bizType} c={C.acc}/>}
+                </div>
+                {fc.address&&<div style={{color:C.sub,fontSize:12,marginBottom:2}}>📍 {fc.address}</div>}
+                <div style={{color:C.sub,fontSize:12}}>{fc.tel||"연락처 없음"}</div>
+                {fc.account&&<div style={{color:C.sub,fontSize:11,marginTop:2}}>🏦 {fc.account}</div>}
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
+                <Btn ch="수정" v="w" sz="s" st={{padding:"5px 10px",fontSize:12}} onClick={()=>setFacSheet({...fc})}/>
+                <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 10px",fontSize:12,color:C.red}} onClick={()=>{if(window.confirm("삭제?"))setFactories(ff=>ff.filter(x=>x.id!==fc.id));}}/>
+              </div>
             </div>
           </div>
         ))}
@@ -1038,8 +1045,24 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
 
       {facSheet!==null&&(
         <Sheet title={facSheet.id?"공장 수정":"공장 추가"} onClose={()=>setFacSheet(null)}>
-          <Field label="공장명" req><TxtInp val={facSheet.name||""} onChange={v=>setFacSheet(p=>({...p,name:v}))} ph="예: OO봉제"/></Field>
-          <Field label="연락처"><TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="02-0000-0000" type="tel"/></Field>
+          <Field label="공장명" req>
+            <TxtInp val={facSheet.name||""} onChange={v=>setFacSheet(p=>({...p,name:v}))} ph="예: OO봉제"/>
+          </Field>
+          <Field label="업종">
+            <DropSel val={facSheet.bizType||""} onChange={v=>setFacSheet(p=>({...p,bizType:v}))}>
+              <option value="">업종 선택</option>
+              {["다이마루","직기","니트","데님","기타"].map(t=><option key={t} value={t}>{t}</option>)}
+            </DropSel>
+          </Field>
+          <Field label="주소">
+            <TxtInp val={facSheet.address||""} onChange={v=>setFacSheet(p=>({...p,address:v}))} ph="예: 서울시 중구 OO동"/>
+          </Field>
+          <Field label="연락처">
+            <TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="02-0000-0000" type="tel"/>
+          </Field>
+          <Field label="계좌번호">
+            <TxtInp val={facSheet.account||""} onChange={v=>setFacSheet(p=>({...p,account:v}))} ph="은행명 계좌번호 예금주"/>
+          </Field>
           <G h={8}/>
           <div style={{display:"flex",gap:10}}>
             <Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setFacSheet(null)}/>
