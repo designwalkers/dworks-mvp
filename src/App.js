@@ -1009,17 +1009,11 @@ function SettingsPage({user, vendors, setVendors, factories, setFactories, onLog
         <Btn ch="로그아웃" v="w" full st={{color:C.red}} onClick={onLogout}/>
       </Card>
 
-      <Card>
-        <div style={{fontWeight:700,fontSize:15,marginBottom:4}}>🏢 거래처 관리</div>
-        <div style={{color:C.sub,fontSize:13,marginBottom:12}}>{vendors.length}개 등록됨</div>
-        <Btn ch="거래처 관리 →" v="w" full onClick={()=>onNav("vendors")}/>
-      </Card>
-
       {/* 공장 관리 */}
       <Card st={{marginTop:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={{fontWeight:700,fontSize:15}}>🏭 공장 관리</div>
-          <Btn ch="+ 추가" sz="s" st={{padding:"6px 12px"}} onClick={()=>{setFacSheet({id:null,name:"",tel:""});}}/>
+          <Btn ch="+ 추가" sz="s" st={{padding:"6px 12px"}} onClick={()=>{setFacSheet({id:null,name:"",bizType:"",address:"",tel:"",account:""});}}/>
         </div>
         {factories.length===0?<div style={{textAlign:"center",padding:"14px 0",color:C.sub,fontSize:13}}>등록된 공장이 없습니다</div>:
         factories.map(fc=>(
