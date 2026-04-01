@@ -1059,12 +1059,12 @@ export default function App() {
 
   return (
     <PhoneMockup>
-      <div style={{minHeight:"100%",background:C.bg,fontFamily:C.fn,color:C.txt,display:"flex",flexDirection:"column"}}>
+      <div style={{minHeight:"100%",background:C.bg,fontFamily:C.fn,color:C.txt,display:"flex",flexDirection:"column",position:"relative"}}>
         <div style={{background:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`,flexShrink:0}}>
           <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:19,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
           <span style={{color:C.sub,fontSize:12}}>{user.name}</span>
         </div>
-        <div style={{flex:1,overflowY:"auto"}}>{pages[page]||pages["dash"]}</div>
+        <div style={{flex:1}}>{pages[page]||pages["dash"]}</div>
         <div style={{background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",flexShrink:0,zIndex:50}}>
           {tabs.map(t=>(
             <button key={t.k} onClick={()=>setPage(t.k)} style={{flex:1,padding:"9px 4px 9px",background:"none",border:"none",color:page===t.k?C.acc:C.sub,cursor:"pointer",fontFamily:C.fn,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
