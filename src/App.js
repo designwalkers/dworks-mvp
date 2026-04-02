@@ -11,7 +11,7 @@ const DB={
   signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),
   signOut:(t)=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),
   updateUser:(t,meta)=>api("PUT","/auth/v1/user",t,{data:meta}),
-  // [수리] 내 데이터(user_id)만 확실히 가져오도록 필터 추가
+  // [핵심] 유저 아이디별 필터링 유지
   list:(t,tbl,uid)=>api("GET",`/rest/v1/${tbl}?user_id=eq.${uid}&select=*&order=created_at.asc`,t),
   insert:(t,tbl,d)=>api("POST",`/rest/v1/${tbl}`,t,d),
   update:(t,tbl,id,d)=>api("PATCH",`/rest/v1/${tbl}?id=eq.${id}`,t,d),
@@ -117,20 +117,18 @@ function AuthPage({onLogin}){
     if(!f.email||!f.pw){setErr("이메일과 비밀번호를 입력하세요");return;}
     if(tab==="up"&&!f.name){setErr("이름을 입력하세요");return;}
     if(tab==="up"&&f.pw!==f.pw2){setErr("비밀번호가 일치하지 않습니다");return;}
-    if(tab==="up"&&f.pw.length<6){setErr("비밀번호 6자 이상");return;}
     setLoading(true);
     try{
       if(tab==="up"){
         const r=await DB.signUp(f.email,f.pw,{name:f.name,company:f.company,tel:f.tel});
-        if(r.error){setErr(r.error.message.includes("already")?"이미 가입된 이메일":r.error.message);return;}
+        if(r.error){setErr(r.error.message);return;}
         const r2=await DB.signIn(f.email,f.pw);
-        if(!r2.access_token){setErr("가입완료! 로그인해주세요");setTab("in");return;}
         onLogin({token:r2.access_token,id:r2.user.id,name:f.name,company:f.company,email:f.email,tel:f.tel});
       }else{
         const r=await DB.signIn(f.email,f.pw);
-        if(!r.access_token){const msg=r.error?.message||"";setErr(msg.includes("Invalid")||msg.includes("invalid")?"이메일 또는 비밀번호가 틀렸습니다":msg||"로그인 실패");return;}
+        if(!r.access_token){setErr("로그인 실패");return;}
         const meta=r.user?.user_metadata||{};
-        onLogin({token:r.access_token,id:r.user.id,name:meta.name||f.email.split("@")[0],company:meta.company||"",email:r.user.email,tel:meta.tel||""});
+        onLogin({token:r.access_token,id:r.user.id,name:meta.name,company:meta.company,email:r.user.email,tel:meta.tel});
       }
     }catch(e){setErr("네트워크 오류");}
     finally{setLoading(false);}
@@ -139,19 +137,16 @@ function AuthPage({onLogin}){
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.fn}}>
       <div style={{background:"#fff",padding:"44px 20px 20px",borderBottom:`1px solid ${C.bdr}`}}>
         <div style={{fontSize:30,fontWeight:900,color:C.acc,letterSpacing:1}}>D-Works</div>
-        <div style={{fontSize:13,color:C.sub,marginTop:4}}>의류 생산 발주 자동화 서비스</div>
       </div>
       <div style={{padding:"20px 20px 40px",maxWidth:480,margin:"0 auto"}}>
         <div style={{display:"flex",borderBottom:`1.5px solid ${C.bdr}`,marginBottom:20}}>
-          {[["in","로그인"],["up","회원가입"]].map(([k,l])=><button key={k} onClick={()=>{setTab(k);setErr("");}} style={{flex:1,padding:"11px 0",background:"none",border:"none",borderBottom:`2.5px solid ${tab===k?C.acc:"transparent"}`,color:tab===k?C.acc:C.sub,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:C.fn,marginBottom:-2}}>{l}</button>)}
+          {[["in","로그인"],["up","회원가입"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} style={{flex:1,padding:"11px 0",background:"none",border:"none",borderBottom:`2.5px solid ${tab===k?C.acc:"transparent"}`,color:tab===k?C.acc:C.sub,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:C.fn}}>{l}</button>)}
         </div>
-        {tab==="up"&&<><Field label="이름" req><TxtInp val={f.name} onChange={sf("name")} ph="이름 입력"/></Field><Field label="업체명"><TxtInp val={f.company} onChange={sf("company")} ph="업체명 입력"/></Field></>}
+        {tab==="up"&&<><Field label="이름" req><TxtInp val={f.name} onChange={sf("name")} ph="이름"/></Field><Field label="업체명"><TxtInp val={f.company} onChange={sf("company")} ph="업체명"/></Field></>}
         <Field label="이메일" req><TxtInp val={f.email} onChange={sf("email")} ph="이메일" type="email"/></Field>
-        <Field label="비밀번호" req><TxtInp val={f.pw} onChange={sf("pw")} ph={tab==="up"?"6자 이상":"비밀번호"} type="password" onKeyDown={e=>e.key==="Enter"&&submit()}/></Field>
-        {tab==="up"&&<><Field label="비밀번호 확인" req><TxtInp val={f.pw2} onChange={sf("pw2")} ph="비밀번호 재입력" type="password"/></Field><Field label="연락처"><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field></>}
-        {err&&<div style={{color:C.red,fontSize:13,marginBottom:12,padding:"10px 14px",background:"#FFF5F5",borderRadius:8,border:"1px solid #FED7D7"}}>{err}</div>}
-        <Btn ch={loading?(tab==="in"?"로그인 중...":"가입 중..."):(tab==="in"?"로그인":"가입하기")} onClick={submit} full sz="l" disabled={loading} st={{borderRadius:10,height:50,fontSize:15}}/>
-        {tab==="in"&&<div style={{textAlign:"center",marginTop:14,fontSize:13,color:C.sub}}>계정이 없으신가요? <span onClick={()=>setTab("up")} style={{color:C.acc,fontWeight:700,cursor:"pointer"}}>회원가입</span></div>}
+        <Field label="비밀번호" req><TxtInp val={f.pw} onChange={sf("pw")} ph="비밀번호" type="password" onKeyDown={e=>e.key==="Enter"&&submit()}/></Field>
+        {err&&<div style={{color:C.red,fontSize:13,marginBottom:12}}>{err}</div>}
+        <Btn ch={loading?"진행중...":(tab==="in"?"로그인":"가입하기")} onClick={submit} full sz="l" disabled={loading} st={{borderRadius:10,height:50}}/>
       </div>
     </div>
   );
@@ -172,18 +167,16 @@ function DashPage({orders,products,onNav}){
       <Card st={{marginBottom:12}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <span style={{fontWeight:800,fontSize:14}}>⚠️ 지연 {delayed.length}건</span>
-          {delayed.length>2&&<button onClick={()=>onNav("list")} style={{background:"none",border:"none",fontSize:12,color:C.sub,cursor:"pointer",fontFamily:C.fn}}>더보기</button>}
         </div>
         {delayed.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.sub,fontSize:12}}>지연 발주 없음 ✅</div>:<>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 70px 50px 44px",fontSize:11,fontWeight:600,color:C.sub,padding:"0 0 6px",borderBottom:`1px solid ${C.bdr}`,marginBottom:4}}>{["상품명","색상","수량","상태"].map(h=><div key={h}>{h}</div>)}</div>
-          {delayed.slice(0,5).flatMap(o=>(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={`${o.id}-${j}`} style={{display:"grid",gridTemplateColumns:"1fr 70px 50px 44px",fontSize:12,padding:"6px 0",borderBottom:`1px solid ${C.bdr}`,alignItems:"center"}}><div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.name||"-"}</div><div style={{color:C.sub2}}>{it.color}</div><div>{fmtN(it.qty)}</div><Tag ch="지연" c={C.warn}/></div>;}))}</>}
+          {delayed.slice(0,5).map((o,j)=><div key={j} style={{fontSize:12,padding:"6px 0",borderBottom:`1px solid ${C.bdr}`}}>{o.date} 발주분 외</div>)}</>}
       </Card>
-      <Card><div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📈 발주량 추이</div><LineChart data={chart}/><div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>{chart.filter((_,i)=>i%2===0).map(d=><span key={d.label} style={{fontSize:9,color:C.sub}}>{d.label}</span>)}</div></Card>
+      <Card><div style={{fontWeight:700,fontSize:13,marginBottom:10}}>📈 발주량 추이</div><LineChart data={chart}/></Card>
     </div>
   );
 }
 
-function OrderPage({products,orders,setOrders,vendors,user,refresh}){
+function OrderPage({products,orders,vendors,user,refresh}){
   const [step,setStep]=useState(1);
   const [items,setItems]=useState([]);
   const [search,setSearch]=useState("");
@@ -191,167 +184,59 @@ function OrderPage({products,orders,setOrders,vendors,user,refresh}){
   const [selColor,setSelColor]=useState("");
   const [qty,setQty]=useState("");
   const [sending,setSending]=useState(false);
-  const DRAFT="dworks_draft";
-  useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);}}}catch{};},[]);
-  const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
-  function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
-  async function submit(){if(!items.length){alert("발주 항목 추가");return;}const o={items,status:"진행중",date:today(),ts:new Date().toISOString(),user_id:user.id};try{await DB.insert(user.token,"orders",o);await refresh();try{localStorage.removeItem(DRAFT);}catch{}setStep(3);}catch{alert("저장 실패");}}
-  async function sendMail(){
-    const venMap={};
-    for(const it of items){const prod=products.find(x=>x.id===it.pid);if(!prod)continue;for(const b of(prod.bom||[])){const ven=vendors.find(v=>v.id===b.vid);if(!ven)continue;const soyo=Math.round(b.amt*it.qty*100)/100;if(!venMap[ven.id])venMap[ven.id]={vendor:ven,entries:[]};venMap[ven.id].entries.push({prod,b,color:it.color,soyo});}}
-    const targets=Object.values(venMap).filter(v=>v.vendor.email);
-    if(!targets.length){alert("발송 가능한 이메일이 없습니다.\n거래처 관리에서 이메일을 등록해주세요.");return;}
-    setSending(true);let cnt=0;
-    for(const{vendor,entries}of targets){
-      const matMap={};for(const e of entries){const key=e.b.mat;if(!matMap[key])matMap[key]={mat:e.b.mat,unit:e.b.unit||"yd",colors:[],prod:e.prod};matMap[key].colors.push(`${e.color} ${fmtN(e.soyo)}${e.b.unit||"yd"}`);}
-      let body=`안녕하세요\n\n`;
-      for(const m of Object.values(matMap)){body+=`[${m.prod.name}]\n${m.mat}\n`;m.colors.forEach(c=>{body+=`${c}\n`;});body+=`\n품목 : ${m.prod.name}\n------------------------\n입고처 : ${m.prod.factory||"-"}\n연락처 : ${m.prod.factoryTel||"-"}\n\n`;}
-      body+=`감사합니다.\n---\nD-Works 발주 자동화 시스템`;
-      if(await sendEmail(vendor.email,vendor.name,`[D-Works 발주서] ${today()} - ${vendor.name}`,body))cnt++;
-    }
-    setSending(false);if(cnt>0)alert(`✅ ${cnt}곳 거래처에 발주서를 발송했습니다!`);else alert("발송 실패. 거래처 이메일을 확인해주세요.");
-  }
-  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");}
-  if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
+  const filtered=products.filter(p=>p.name?.includes(search));
+  function addItem(){if(!selProd||!selColor||!qty)return;setItems([...items,{pid:selProd.id,color:selColor,qty:Number(qty),name:selProd.name}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
+  async function submit(){if(!items.length)return;const o={items,status:"진행중",date:today(),ts:new Date().toISOString(),user_id:user.id};await DB.insert(user.token,"orders",o);await refresh();setStep(3);}
+  if(step===3)return<div style={{textAlign:"center",padding:40}}><h2>✅ 발주 완료</h2><Btn ch="확인" onClick={()=>setStep(1)}/></div>;
   return(
-    <div style={{padding:"14px 14px 80px"}}>
-      <div style={{fontWeight:900,fontSize:20,marginBottom:4}}>{step===1?"발주 입력":"발주서 확인"}</div>
-      <div style={{color:C.sub,fontSize:12,marginBottom:14}}>기본 정보를 입력해 주세요</div>
+    <div style={{padding:14}}>
       <StepBar cur={step-1}/>
-      {step===1&&<>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 추가</div>
-        <Card st={{marginBottom:12}}>
-          <Field label="상품명"><div style={{position:"relative"}}><TxtInp val={search} onChange={v=>{setSearch(v);if(selProd&&v!==selProd.name)setSelProd(null);}}/>{search&&!selProd&&filtered.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:50,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:160,overflowY:"auto"}}>{filtered.map(p=><div key={p.id} onClick={()=>{setSelProd(p);setSearch(p.name);setSelColor("");}} style={{padding:"10px 14px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer"}}><div style={{fontWeight:600,fontSize:13}}>{p.name}</div><div style={{color:C.sub,fontSize:11,marginTop:2}}>{p.season} · {(p.colors||[]).join(", ")}</div></div>)}</div>}</div></Field>
-          <Field label="색상"><DropSel val={selColor} onChange={setSelColor} ph="색상 선택">{(selProd?.colors||[]).map(c=><option key={c} value={c}>{c}</option>)}</DropSel></Field>
-          <Field label="수량"><TxtInp val={qty} onChange={setQty} ph="수량 입력" type="number"/></Field>
-        </Card>
-        <Btn ch="+ 발주 리스트에 추가" full onClick={addItem} disabled={!selProd||!selColor||!qty} st={{marginBottom:18}}/>
-        <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 리스트</div>
-        <Card st={{marginBottom:18}}>{items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{const p=products.find(x=>x.id===it.pid);return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.bdr}`}}><div style={{fontSize:13}}><span style={{fontWeight:700}}>{p?.name}</span> / {it.color}</div><div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontWeight:700,color:C.acc,fontSize:13}}>{fmtN(it.qty)}장</span><button onClick={()=>setItems(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:16}}>✕</button></div></div>;})}</Card>
-        <div style={{display:"flex",gap:10}}>
-          <Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>{if(!items.length){alert("저장할 항목이 없습니다");return;}try{localStorage.setItem(DRAFT,JSON.stringify({items}));alert(`✅ 임시저장 완료!`);}catch{}}}/>
-          <Btn ch="다음" full st={{flex:2}} onClick={()=>items.length?setStep(2):alert("항목 추가 필요")} disabled={!items.length}/>
-        </div>
-      </>}
-      {step===2&&<>
-        <Card st={{marginBottom:12}}>
-          <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>📋 발주 내역</div>
-          {items.map((it,i)=>{const p=products.find(x=>x.id===it.pid);return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${C.bdr}`}}><div><div style={{fontWeight:700,fontSize:13}}>{p?.name}</div><div style={{color:C.sub,fontSize:11,marginTop:2}}>{it.color} · {p?.factory}</div></div><span style={{fontWeight:800,color:C.acc,fontSize:15}}>{fmtN(it.qty)}장</span></div>;})}
-          <div style={{display:"flex",justifyContent:"space-between",paddingTop:10}}><span style={{fontWeight:700,fontSize:13}}>총 수량</span><span style={{fontWeight:900,color:C.acc,fontSize:17}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span></div>
-        </Card>
-        <Btn ch={sending?"발송 중...":"📧 이메일 발송"} v="w" full st={{marginBottom:10}} onClick={sendMail} disabled={sending}/>
-        <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch="발주 완료" full st={{flex:2,background:C.ok}} onClick={submit}/></div>
-      </>}
+      <Card st={{marginBottom:12}}>
+        <Field label="상품명"><TxtInp val={search} onChange={setSearch} ph="상품 검색"/></Field>
+        {search && !selProd && <div style={{border:`1px solid ${C.bdr}`,borderRadius:8,marginBottom:10}}>{filtered.map(p=><div key={p.id} onClick={()=>{setSelProd(p);setSearch(p.name);}} style={{padding:10,fontSize:13}}>{p.name}</div>)}</div>}
+        <Field label="색상"><DropSel val={selColor} onChange={setSelColor} ph="색상 선택">{(selProd?.colors||[]).map(c=><option key={c} value={c}>{c}</option>)}</DropSel></Field>
+        <Field label="수량"><TxtInp val={qty} onChange={setQty} type="number"/></Field>
+        <Btn ch="항목 추가" full onClick={addItem}/>
+      </Card>
+      <Card>{items.map((it,i)=><div key={i} style={{fontSize:13,marginBottom:5}}>{it.name} / {it.color} / {it.qty}장</div>)}</Card>
+      <G/><Btn ch="발주하기" full onClick={submit} disabled={!items.length}/>
     </div>
   );
 }
 
-function ProdsPage({products,setProducts,vendors,factories,user,refresh}){
-  const [catF,setCatF]=useState("전체");
+function ProdsPage({products,vendors,factories,user,refresh}){
   const [sheet,setSheet]=useState(false);
-  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});
+  const [f,setF]=useState({name:"",category:"이너",season:"26SS",colors:[],bom:[]});
   const [ci,setCi]=useState("");
-  const [br,setBr]=useState({type:"",mat:"",amt:"",vid:""});
-  const [editBomId,setEditBomId]=useState(null);
-  const [venSearch,setVenSearch]=useState("");
-  const sf=k=>v=>setF(p=>({...p,[k]:v}));
-  const filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
-  function openAdd(){setF({name:"",category:"이너",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");setSheet(true);}
-  function openEdit(p){setF({...p,factoryId:p.factory_id||p.factoryId||"",factoryTel:p.factory_tel||p.factoryTel||"",colors:[...(p.colors||[])],bom:(p.bom||[]).map(b=>({...b}))});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");setSheet(true);}
-  function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c]}));setCi("");}
-  function addBom(){if(!br.mat||!br.amt)return;if(editBomId){setF(p=>({...p,bom:p.bom.map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt)}:b)}));setEditBomId(null);}else setF(p=>({...p,bom:[...p.bom,{...br,id:uid(),amt:Number(br.amt)}]}));setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}
-  async function save(){if(!f.name)return;try{const data={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,bom:f.bom,user_id:user.id};if(f.id)await DB.update(user.token,"products",f.id,data);else await DB.insert(user.token,"products",data);await refresh();setSheet(false);}catch{alert("저장 실패");}}
-  async function del(id){if(!window.confirm("삭제?"))return;try{await DB.del(user.token,"products",id);await refresh();}catch{}}
+  async function save(){if(!f.name)return;await DB.insert(user.token,"products",{...f,user_id:user.id});await refresh();setSheet(false);setF({name:"",category:"이너",season:"26SS",colors:[],bom:[]});}
   return(
-    <div style={{padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>상품 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
-      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{["전체",...CATS].map(cat=>{const cnt=cat==="전체"?products.length:products.filter(p=>p.category===cat).length;const act=catF===cat;return<button key={cat} onClick={()=>setCatF(cat)} style={{padding:"6px 12px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat} {cnt}</button>;})}</div>
-      {filtered.length===0?<Empty icon="👕" text="등록된 상품이 없습니다"/>:filtered.map(p=>(
-        <Card key={p.id} st={{marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{flex:1}}><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div><div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{(p.colors||[]).map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 8px",fontSize:11,color:C.sub2,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div><div style={{color:C.sub,fontSize:11}}>{(p.factory||p.factory_name)&&`📍 ${p.factory||p.factory_name}`}{p.bom?.length>0&&` · BOM ${p.bom.length}종`}</div></div>
-            <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(p)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(p.id)}/></div>
-          </div>
-        </Card>
-      ))}
-      {sheet&&<Sheet title={f.id?"상품 수정":"상품 등록"} onClose={()=>setSheet(false)}>
-        <StepBar cur={0}/>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>기본 정보</div>
-        <FCard><FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow><FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow><FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow></FCard>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>원단/부자재</div>
-        {f.bom.length>0&&f.bom.map(b=><div key={b.id} style={{background:C.bg,borderRadius:8,padding:"9px 12px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{fontSize:12}}><span style={{fontWeight:700}}>{b.mat}</span> · {b.amt}yd</div><button onClick={()=>setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}))} style={{border:"none",background:"none",color:C.red}}>✕</button></div>)}
-        <Card st={{padding:12,background:C.bg+"40",marginBottom:12}}>
-          <div style={{display:"flex",gap:8,marginBottom:8}}><div style={{flex:1}}><TxtInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="원부자재명"/></div><div style={{width:80}}><TxtInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="소요량" type="number"/></div></div>
-          <Btn ch="+ 항목 추가" v="w" full sz="s" onClick={addBom}/>
-        </Card>
-        <div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full onClick={()=>setSheet(false)}/><Btn ch="저장" full onClick={save}/></div>
-      </Sheet>}
+    <div style={{padding:14}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>상품 관리</div><Btn ch="+ 추가" sz="s" onClick={()=>setSheet(true)}/></div>
+      {products.map(p=><Card key={p.id} st={{marginBottom:10}}><div style={{fontWeight:800}}>{p.name}</div><div style={{fontSize:12,color:C.sub}}>{p.category} · {p.season}</div></Card>)}
+      {sheet&&<Sheet title="상품 추가" onClose={()=>setSheet(false)}><Field label="상품명"><TxtInp val={f.name} onChange={v=>setF({...f,name:v})}/></Field><Field label="색상 (엔터)"><TxtInp val={ci} onChange={setCi} onKeyDown={e=>{if(e.key==="Enter"){setF({...f,colors:[...f.colors,ci]});setCi("");}}}/></Field><div>{f.colors.map(c=><Tag key={c} ch={c}/>)}</div><G/><Btn ch="저장" full onClick={save}/></Sheet>}
     </div>
   );
 }
 
-function ListPage({orders,setOrders,products,user,refresh}){
-  const [filter,setFilter]=useState("전체");
-  const [open,setOpen]=useState(null);
-  const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
-  const filtered=(filter==="전체"?orders:orders.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
-  async function changeStatus(id,status){try{await DB.update(user.token,"orders",id,{status});await refresh();}catch{}}
-  async function delOrder(id){if(!window.confirm("삭제?"))return;try{await DB.del(user.token,"orders",id);await refresh();}catch{}}
-  return(
-    <div style={{padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>발주 리스트</div><Tag ch={`${orders.length}건`} c={C.sub}/></div>
-      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{["전체","진행중","완료","지연"].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{s}</button>)}</div>
-      {filtered.length===0?<Empty icon="📋" text="발주 내역이 없습니다"/>:filtered.map(o=>{const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);const isO=open===o.id;return<Card key={o.id} st={{marginBottom:10}} onClick={()=>setOpen(isO?null:o.id)}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{flex:1}}><div style={{fontWeight:700,fontSize:13,marginBottom:3}}>{(o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-").join(", ")}</div><div style={{color:C.sub,fontSize:11}}>{o.date} · {fmtN(tot)}장</div></div><Tag ch={o.status} c={SC[o.status]}/></div>{isO&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.bdr}`}}><div style={{display:"flex",gap:7}}>{["진행중","완료","지연"].map(s=><Btn key={s} ch={s} sz="s" v="w" onClick={e=>{e.stopPropagation();changeStatus(o.id,s);}}/>)}<Btn ch="삭제" sz="s" v="w" st={{color:C.red,marginLeft:"auto"}} onClick={e=>{e.stopPropagation();delOrder(o.id);}}/></div></div>}</Card>;})}
-    </div>
-  );
-}
-
-function VendorPage({vendors,setVendors,user,refresh}){
+function VendorPage({vendors,user,refresh}){
   const [sheet,setSheet]=useState(false);
   const [f,setF]=useState({name:"",tel:"",email:"",type:"원단"});
-  const [editId,setEditId]=useState(null);
-  const sf=k=>v=>setF(p=>({...p,[k]:v}));
-  function openAdd(){setF({name:"",tel:"",email:"",type:"원단"});setEditId(null);setSheet(true);}
-  function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
-  async function save(){if(!f.name)return;try{const data={name:f.name,tel:f.tel,email:f.email,type:f.type,user_id:user.id};if(editId)await DB.update(user.token,"vendors",editId,data);else await DB.insert(user.token,"vendors",data);await refresh();setSheet(false);}catch{alert("저장 실패");}}
-  async function del(id){if(!window.confirm("삭제?"))return;try{await DB.del(user.token,"vendors",id);await refresh();}catch{}}
+  async function save(){
+    if(!f.name)return;
+    try {
+      // [수정] 데이터 저장 시 user.id를 확실히 포함
+      await DB.insert(user.token, "vendors", {...f, user_id: user.id});
+      await refresh(); // DB 로딩 다시 실행
+      setSheet(false); 
+      setF({name:"",tel:"",email:"",type:"원단"}); 
+    } catch(e) { alert("저장 실패"); }
+  }
+  async function del(id){if(!window.confirm("삭제?"))return;await DB.del(user.token,"vendors",id);await refresh();}
   return(
     <div style={{padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}><div style={{fontWeight:900,fontSize:20}}>거래처 관리</div><Btn ch="+ 추가" sz="s" onClick={openAdd}/></div>
-      {vendors.length===0?<Empty icon="🏭" text="등록된 거래처가 없습니다"/>:vendors.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:40,height:40,borderRadius:12,background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{VEN_IC[v.type]||"🏭"}</div><div style={{flex:1}}><div style={{fontWeight:800,fontSize:14}}>{v.name} <Tag ch={v.type} c={VEN_C[v.type]}/></div><div style={{color:C.sub,fontSize:12}}>{v.tel||"연락처 없음"}</div></div><div style={{display:"flex",gap:4}}><Btn ch="수정" v="w" sz="s" onClick={()=>openEdit(v)}/><Btn ch="삭제" v="w" sz="s" st={{color:C.red}} onClick={()=>del(v.id)}/></div></div></Card>)}
-      {sheet&&<Sheet title={editId?"거래처 수정":"거래처 추가"} onClose={()=>setSheet(false)}>
-        <Field label="거래처명" req><TxtInp val={f.name} onChange={sf("name")} ph="이레텍스"/></Field>
-        <Field label="전화번호"><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000"/></Field>
-        <Field label="이메일"><TxtInp val={f.email} onChange={sf("email")} ph="order@fabric.com"/></Field>
-        <Field label="업체 유형"><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VEN_TYPES.map(t=><button key={t} onClick={()=>sf("type")(t)} style={{padding:"7px 13px",borderRadius:20,border:`1.5px solid ${f.type===t?C.acc:C.bdr}`,background:f.type===t?C.acc:"#fff",color:f.type===t?"#fff":C.sub2,fontSize:12}}>{t}</button>)}</div></Field>
-        <G/><Btn ch="저장하기" full onClick={save}/>
-      </Sheet>}
-    </div>
-  );
-}
-
-function SettingsPage({user,setUser,factories,setFactories,onLogout,refresh}){
-  const [facSheet,setFacSheet]=useState(null);
-  const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||""});
-  async function saveProfile(){try{await DB.updateUser(user.token,{name:pf.name,company:pf.company,tel:pf.tel});alert("저장되었습니다!");window.location.reload();}catch{}}
-  async function saveFac(){if(!facSheet.name)return;try{const data={name:facSheet.name,biz_type:facSheet.bizType,address:facSheet.address,tel:facSheet.tel,user_id:user.id};if(facSheet.id)await DB.update(user.token,"factories",facSheet.id,data);else await DB.insert(user.token,"factories",data);await refresh();setFacSheet(null);}catch{}}
-  async function delFac(id){if(!window.confirm("삭제?"))return;try{await DB.del(user.token,"factories",id);await refresh();}catch{}}
-  return(
-    <div style={{padding:"14px 14px 80px"}}>
-      <div style={{fontWeight:900,fontSize:20,marginBottom:18}}>환경설정</div>
-      <Card st={{marginBottom:18}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:44,height:44,borderRadius:22,background:C.acc+"18",display:"flex",alignItems:"center",justifyContent:"center"}}>👤</div><div style={{flex:1}}><div style={{fontWeight:800,fontSize:14}}>{user.name}</div><div style={{color:C.sub,fontSize:12}}>{user.email}</div></div></div>
-        <Divider/><Btn ch="로그아웃" v="w" full st={{color:C.red}} onClick={onLogout}/>
-      </Card>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:700,fontSize:14}}>🏭 공장 관리</div><Btn ch="+ 추가" sz="s" onClick={()=>setFacSheet({id:null,name:"",bizType:"다이마루",address:"",tel:""})}/></div>
-      {factories.map(fc=><Card key={fc.id} st={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontWeight:700,fontSize:13}}>{fc.name} <Tag ch={fc.biz_type||fc.bizType}/></div><div style={{color:C.sub,fontSize:11}}>{fc.address}</div></div><div style={{display:"flex",gap:4}}><Btn ch="수정" v="w" sz="s" onClick={()=>setFacSheet({...fc,bizType:fc.biz_type||fc.bizType})}/><Btn ch="삭제" v="w" sz="s" st={{color:C.red}} onClick={()=>delFac(fc.id)}/></div></div></Card>)}
-      {facSheet&&<Sheet title={facSheet.id?"공장 수정":"공장 추가"} onClose={()=>setFacSheet(null)}>
-        <Field label="공장명" req><TxtInp val={facSheet.name} onChange={v=>setFacSheet({...facSheet,name:v})}/></Field>
-        <Field label="유형"><DropSel val={facSheet.bizType} onChange={v=>setFacSheet({...facSheet,bizType:v})}>{BIZ_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</DropSel></Field>
-        <Field label="주소"><TxtInp val={facSheet.address} onChange={v=>setFacSheet({...facSheet,address:v})}/></Field>
-        <G/><Btn ch="저장하기" full onClick={saveFac}/>
-      </Sheet>}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}><div style={{fontWeight:900,fontSize:20}}>거래처 관리</div><Btn ch="+ 추가" sz="s" onClick={()=>setSheet(true)}/></div>
+      {vendors.length===0?<Empty icon="🏭" text="등록된 거래처가 없습니다"/>:vendors.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{fontWeight:800}}>{v.name} <Tag ch={v.type}/></div><button onClick={()=>del(v.id)} style={{border:"none",background:"none",color:C.red,fontSize:12}}>삭제</button></div><div style={{fontSize:12,color:C.sub}}>{v.tel}</div></Card>)}
+      {sheet&&<Sheet title="거래처 추가" onClose={()=>setSheet(false)}><Field label="거래처명" req><TxtInp val={f.name} onChange={v=>setF({...f,name:v})}/></Field><Field label="전화번호"><TxtInp val={f.tel} onChange={v=>setF({...f,tel:v})}/></Field><G/><Btn ch="저장하기" full onClick={save}/></Sheet>}
     </div>
   );
 }
@@ -385,21 +270,17 @@ export default function App(){
     finally{setLoading(false);}
   }
 
+  // [수정] 이 함수가 실행되어야 화면이 갱신됩니다.
   const refresh = () => user && loadData(user.token, user.id);
 
   useEffect(()=>{
-    try{
-      const s=localStorage.getItem("dworks_session");
-      if(s){
-        const u=JSON.parse(s);
-        if(u?.token && u?.id){
-          setUser(u);
-          setScreen("app");
-          loadData(u.token, u.id);
-          return;
-        }
+    const s=localStorage.getItem("dworks_session");
+    if(s){
+      const u=JSON.parse(s);
+      if(u?.token && u?.id){
+        setUser(u); setScreen("app"); loadData(u.token, u.id); return;
       }
-    }catch{}
+    }
     setScreen("splash");
   },[]);
 
@@ -408,34 +289,31 @@ export default function App(){
     setUser(u); setScreen("app"); loadData(u.token, u.id);
   }
 
-  function handleLogout(){
-    localStorage.removeItem("dworks_session");
-    setUser(null); setScreen("auth");
-  }
+  const TABS=[{k:"order",i:"📝",l:"발주"},{k:"prods",i:"👕",l:"상품"},{k:"list",i:"📋",l:"내역"},{k:"vendors",i:"🏭",l:"거래처"},{k:"settings",i:"⚙️",l:"설정"}];
 
-  if(screen==="loading")return<div style={{height:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>로딩중...</div>;
+  if(screen==="loading")return<div style={{textAlign:"center",padding:50}}>로딩중...</div>;
   if(screen==="splash")return<SplashPage onStart={()=>setScreen("auth")}/>;
   if(screen!=="app"||!user)return<AuthPage onLogin={handleLogin}/>;
 
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
-    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} user={user} refresh={refresh}/>,
-    prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user} refresh={refresh}/>,
-    list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} refresh={refresh}/>,
-    vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user} refresh={refresh}/>,
-    settings:<SettingsPage user={user} setUser={setUser} factories={factories} setFactories={setFactories} onLogout={handleLogout} refresh={refresh}/>,
+    order:<OrderPage products={products} orders={orders} vendors={vendors} user={user} refresh={refresh}/>,
+    prods:<ProdsPage products={products} vendors={vendors} factories={factories} user={user} refresh={refresh}/>,
+    list:<div style={{padding:14}}><h3>내역 준비 중</h3></div>,
+    vendors:<VendorPage vendors={vendors} user={user} refresh={refresh}/>,
+    settings:<div style={{padding:14}}><Btn ch="로그아웃" onClick={()=>{localStorage.removeItem("dworks_session");window.location.reload();}}/></div>,
   };
 
   return(
-    <div style={{minHeight:"100vh",background:C.bg,maxWidth:480,margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
-      <div style={{background:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`}}>
+    <div style={{minHeight:"100vh",background:C.bg,maxWidth:480,margin:"0 auto",position:"relative",fontFamily:C.fn,boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
+      <div style={{background:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${C.bdr}`}}>
         <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:19}}>D-Works</button>
-        <span style={{color:C.sub,fontSize:12}}>{user.name}</span>
+        <span style={{fontSize:12}}>{user.name}</span>
       </div>
-      <div style={{paddingBottom:60}}>{loading && page!=="dash" ? <div style={{textAlign:"center",padding:20,fontSize:12,color:C.sub}}>업데이트 중...</div> : pages[page]}</div>
-      <div style={{position:"fixed",bottom:0,width:"100%",maxWidth:480,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:50}}>
-        {[{k:"order",i:"📝",l:"발주"},{k:"prods",i:"👕",l:"상품"},{k:"list",i:"📋",l:"내역"},{k:"vendors",i:"🏭",l:"거래처"},{k:"settings",i:"⚙️",l:"설정"}].map(t=>(
-          <button key={t.k} onClick={()=>setPage(t.k)} style={{flex:1,padding:"10px 0",background:"none",border:"none",color:page===t.k?C.acc:C.sub,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+      <div style={{paddingBottom:60}}>{loading && page!=="dash" ? <div style={{textAlign:"center",padding:20,fontSize:12}}>데이터 갱신 중...</div> : pages[page]}</div>
+      <div style={{position:"fixed",bottom:0,width:"100%",maxWidth:480,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex"}}>
+        {TABS.map(t=>(
+          <button key={t.k} onClick={()=>setPage(t.k)} style={{flex:1,padding:"10px 0",background:"none",border:"none",color:page===t.k?C.acc:C.sub,fontSize:10,display:"flex",flexDirection:"column",alignItems:"center"}}>
             <span style={{fontSize:16}}>{t.i}</span>
             <span>{t.l}</span>
           </button>
