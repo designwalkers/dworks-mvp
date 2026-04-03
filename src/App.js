@@ -105,20 +105,38 @@ function SplashPage({onStart}){
 
 function AuthPage({onLogin}){
   const [tab,setTab]=useState("in");
-  const [f,setF]=useState({name:"",company:"",email:"",pw:"",pw2:"",tel:""});
+  // 폼 필드 확장: 업체명, 브랜드명, 이름, 직함, 연락처, 이메일, 비번, 비번확인, 주소, 약관동의
+  const [f,setF]=useState({company:"",brand:"",name:"",position:"",tel:"",email:"",pw:"",pw2:"",address:"",agree:false});
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
+
   async function submit(){
     setErr("");
+    // 필수값 체크 로직 강화
     if(!f.email||!f.pw){setErr("이메일과 비밀번호를 입력하세요");return;}
-    if(tab==="up"&&!f.name){setErr("이름을 입력하세요");return;}
-    if(tab==="up"&&f.pw!==f.pw2){setErr("비밀번호가 일치하지 않습니다");return;}
-    if(tab==="up"&&f.pw.length<6){setErr("비밀번호 6자 이상");return;}
+    if(tab==="up"){
+      if(!f.company){setErr("업체명을 입력하세요");return;}
+      if(!f.name){setErr("성함을 입력하세요");return;}
+      if(!f.position){setErr("직함을 입력하세요");return;}
+      if(!f.tel){setErr("연락처를 입력하세요");return;}
+      if(f.pw!==f.pw2){setErr("비밀번호가 일치하지 않습니다");return;}
+      if(f.pw.length<6){setErr("비밀번호 6자 이상");return;}
+      if(!f.agree){setErr("개인정보 수집 및 이용에 동의해주세요");return;}
+    }
+
     setLoading(true);
     try{
       if(tab==="up"){
-        const r=await DB.signUp(f.email,f.pw,{name:f.name,company:f.company,tel:f.tel});
+        // 회원가입 시 메타데이터에 모든 정보 저장
+        const r=await DB.signUp(f.email,f.pw,{
+          company:f.company,
+          brand:f.brand,
+          name:f.name,
+          position:f.position,
+          tel:f.tel,
+          address:f.address
+        });
         if(r.error){setErr(r.error.message.includes("already")?"이미 가입된 이메일":r.error.message);return;}
         const r2=await DB.signIn(f.email,f.pw);
         if(!r2.access_token){setErr("가입완료! 로그인해주세요");setTab("in");return;}
@@ -142,12 +160,42 @@ function AuthPage({onLogin}){
         <div style={{display:"flex",borderBottom:`1.5px solid ${C.bdr}`,marginBottom:20}}>
           {[["in","로그인"],["up","회원가입"]].map(([k,l])=><button key={k} onClick={()=>{setTab(k);setErr("");}} style={{flex:1,padding:"11px 0",background:"none",border:"none",borderBottom:`2.5px solid ${tab===k?C.acc:"transparent"}`,color:tab===k?C.acc:C.sub,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:C.fn,marginBottom:-2}}>{l}</button>)}
         </div>
-        {tab==="up"&&<><Field label="이름" req><TxtInp val={f.name} onChange={sf("name")} ph="이름 입력"/></Field><Field label="업체명"><TxtInp val={f.company} onChange={sf("company")} ph="업체명 입력"/></Field></>}
-        <Field label="이메일" req><TxtInp val={f.email} onChange={sf("email")} ph="이메일" type="email"/></Field>
+        
+        {tab==="up" && (
+          <>
+            <Field label="업체명" req><TxtInp val={f.company} onChange={sf("company")} ph="회사명을 입력하세요"/></Field>
+            <Field label="브랜드명"><TxtInp val={f.brand} onChange={sf("brand")} ph="브랜드명을 입력하세요 (선택)"/></Field>
+            <Field label="성함" req><TxtInp val={f.name} onChange={sf("name")} ph="성함을 입력하세요"/></Field>
+            <Field label="직함" req><TxtInp val={f.position} onChange={sf("position")} ph="예: 대표, 팀장, 매니저"/></Field>
+            <Field label="연락처" req><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field>
+          </>
+        )}
+
+        <Field label="이메일" req><TxtInp val={f.email} onChange={sf("email")} ph="example@email.com" type="email"/></Field>
         <Field label="비밀번호" req><TxtInp val={f.pw} onChange={sf("pw")} ph={tab==="up"?"6자 이상":"비밀번호"} type="password" onKeyDown={e=>e.key==="Enter"&&submit()}/></Field>
-        {tab==="up"&&<><Field label="비밀번호 확인" req><TxtInp val={f.pw2} onChange={sf("pw2")} ph="비밀번호 재입력" type="password"/></Field><Field label="연락처"><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field></>}
-        {err&&<div style={{color:C.red,fontSize:13,marginBottom:12,padding:"10px 14px",background:"#FFF5F5",borderRadius:8,border:"1px solid #FED7D7"}}>{err}</div>}
-        <Btn ch={loading?(tab==="in"?"로그인 중...":"가입 중..."):(tab==="in"?"로그인":"가입하기")} onClick={submit} full sz="l" disabled={loading} st={{borderRadius:10,height:50,fontSize:15}}/>
+        
+        {tab==="up" && (
+          <>
+            <Field label="비밀번호 확인" req><TxtInp val={f.pw2} onChange={sf("pw2")} ph="비밀번호 재입력" type="password"/></Field>
+            <Field label="주소"><TxtInp val={f.address} onChange={sf("address")} ph="사무실 주소를 입력하세요"/></Field>
+            
+            <div style={{marginTop:24, padding:14, background:"#fff", border:`1px solid ${C.bdr}`, borderRadius:10}}>
+              <div style={{fontSize:12, color:C.sub2, lineHeight:1.6, height:80, overflowY:"auto", marginBottom:10}}>
+                <strong>[개인정보 수집 및 이용 안내]</strong><br/>
+                1. 수기 계산 및 발주 업무 자동화를 위해 업체명, 성함, 연락처를 수집합니다.<br/>
+                2. 수집된 정보는 서비스 제공 및 고객 관리를 위해서만 사용됩니다.<br/>
+                3. 사용자는 언제든 탈퇴 및 정보 수정을 요청할 수 있습니다.
+              </div>
+              <label style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer"}}>
+                <input type="checkbox" checked={f.agree} onChange={e=>sf("agree")(e.target.checked)} style={{width:16, height:16}} />
+                <span style={{fontSize:13, fontWeight:600, color:C.txt}}>내용을 확인했으며 동의합니다 (필수)</span>
+              </label>
+            </div>
+          </>
+        )}
+
+        {err&&<div style={{color:C.red,fontSize:13,marginTop:16,marginBottom:12,padding:"10px 14px",background:"#FFF5F5",borderRadius:8,border:"1px solid #FED7D7"}}>{err}</div>}
+        <Btn ch={loading?(tab==="in"?"로그인 중...":"가입 중..."):(tab==="in"?"로그인":"가입하기")} onClick={submit} full sz="l" disabled={loading} st={{borderRadius:10,height:50,fontSize:15,marginTop:20}}/>
         {tab==="in"&&<div style={{textAlign:"center",marginTop:14,fontSize:13,color:C.sub}}>계정이 없으신가요? <span onClick={()=>setTab("up")} style={{color:C.acc,fontWeight:700,cursor:"pointer"}}>회원가입</span></div>}
       </div>
     </div>
@@ -357,31 +405,21 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 
   async function save(){
     if(!f.name)return;
-    const sd={
-      name:f.name,
-      category:f.category,
-      season:f.season,
-      factory_id:f.factoryId||null,
-      factory:f.factory,
-      factory_tel:f.factoryTel,
-      colors:f.colors,
-      colorBom:f.colorBom 
-    };
-
+    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId||null,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
     try{
       if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`[상품 수정 실패] ${r.message||'다시 로그인해주세요.'}`);return;}
+        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요!`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
       else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message||'권한 없음'}`);
+          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요!`);
           return;
         }
         const newProd = r[0];
-        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.colorBom||newProd.color_bom||{}}]);
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
       }
     }catch(e){
       alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
@@ -520,7 +558,6 @@ function ListPage({orders,setOrders,products,user}){
 
 function VendorPage({vendors,setVendors,user}){
   const [sheet,setSheet]=useState(false);
-  // 상태 변수에 subTel(선택 전화번호), address(주소), bizNo(사업자번호) 추가
   const [f,setF]=useState({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:""});
   const [editId,setEditId]=useState(null);
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
@@ -529,39 +566,30 @@ function VendorPage({vendors,setVendors,user}){
   function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
 
   async function save(){
-    // 필수값 유효성 검사
     if(!f.name || !f.tel || !f.address){
       alert("거래처명, 핸드폰번호, 거래처 주소는 필수 입력 항목입니다.");
       return;
     }
-
     const dataToSave = {
       name: f.name,
-      tel: f.tel, // 핸드폰번호
-      sub_tel: f.subTel || null, // 전화번호(선택)
+      tel: f.tel, 
+      sub_tel: f.subTel || null,
       email: f.email,
       type: f.type,
-      address: f.address, // 주소(필수)
-      biz_no: f.bizNo || null // 사업자등록번호(선택)
+      address: f.address,
+      biz_no: f.bizNo || null
     };
-
     try{
       if(editId){
         if(user?.token){
           const r=await DB.update(user.token,"vendors",editId,dataToSave);
-          if(r.error||r.code){
-            alert(`[거래처 수정 실패] Supabase 'vendors' 테이블에 sub_tel, address, biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
-            return;
-          }
+          if(r.error||r.code){alert(`[거래처 수정 실패] DB 컬럼(sub_tel, address, biz_no) 추가 여부를 확인하세요.`);return;}
         }
         setVendors(vv=>vv.map(v=>v.id===editId?{...v,...f}:v));
       }else{
         if(user?.token){
           const r=await DB.insert(user.token,"vendors",{...dataToSave,user_id:user.id});
-          if(r.error||r.code||!Array.isArray(r)||r.length===0){
-            alert(`[거래처 추가 실패] Supabase 'vendors' 테이블에 sub_tel, address, biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
-            return;
-          }
+          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[거래처 추가 실패] DB 컬럼 추가 여부를 확인하세요.`);return;}
           const nv = r[0];
           setVendors(vv=>[...vv, {...nv, subTel:nv.sub_tel||"", address:nv.address||"", bizNo:nv.biz_no||""}]);
         }
@@ -579,10 +607,8 @@ function VendorPage({vendors,setVendors,user}){
       {vendors.length===0?<Empty icon="🏭" text="등록된 거래처가 없습니다"/>:vendors.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:40,height:40,borderRadius:12,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{VEN_IC[v.type]||"🏭"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div><div style={{color:C.sub,fontSize:12}}>📱 {v.tel||"핸드폰 미등록"}{v.subTel ? ` · ☎️ ${v.subTel}` : ""}</div>{v.address&&<div style={{fontSize:11,color:C.sub2,marginTop:2}}>📍 {v.address}</div>}{v.bizNo&&<div style={{fontSize:11,color:C.sub,marginTop:2}}>🏢 {v.bizNo}</div>}<div style={{fontSize:11,color:v.email?C.sub:C.warn,marginTop:2}}>{v.email||"⚠️ 이메일 미등록"}</div></div><div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(v)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(v.id)}/></div></div></Card>)}
       {sheet&&<Sheet title={editId?"거래처 수정":"거래처 추가"} onClose={()=>setSheet(false)}>
         <Field label="거래처명" req><TxtInp val={f.name} onChange={sf("name")} ph="이레텍스"/></Field>
-        {/* 핸드폰번호 (필수), 전화번호 (선택) */}
         <Field label="핸드폰번호" req><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field>
         <Field label="전화번호 (선택)"><TxtInp val={f.subTel} onChange={sf("subTel")} ph="02-000-0000" type="tel"/></Field>
-        {/* 주소 (필수), 사업자번호 (선택) */}
         <Field label="거래처 주소" req><TxtInp val={f.address} onChange={sf("address")} ph="서울시 종로구 ..." /></Field>
         <Field label="사업자 등록번호"><TxtInp val={f.bizNo} onChange={sf("bizNo")} ph="000-00-00000" /></Field>
         <Field label="이메일 (발주서 발송용)"><TxtInp val={f.email} onChange={sf("email")} ph="order@fabric.com" type="email"/></Field>
@@ -668,7 +694,6 @@ export default function App(){
         try{localStorage.removeItem("dworks_session");}catch{}
         setUser(null);setScreen("auth");setLoading(false);return;
       }
-      // DB에서 데이터를 가져올 때 카멜케이스(subTel, bizNo 등)로 매핑하여 저장
       setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[]})):[]);
