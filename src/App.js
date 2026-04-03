@@ -58,7 +58,6 @@ function TxtInp({val,onChange,ph,type="text",onKeyDown}){return<div style={{disp
 function DropSel({val,onChange,children,ph}){return<div style={{position:"relative",border:`1px solid ${C.bdr}`,borderRadius:8,background:"#fff"}}><select value={val||""} onChange={e=>onChange(e.target.value)} style={{width:"100%",border:"none",outline:"none",padding:"12px 14px",fontSize:13,color:val?C.txt:C.sub,fontFamily:C.fn,background:"transparent",WebkitAppearance:"none",cursor:"pointer"}}>{ph&&<option value="">{ph}</option>}{children}</select><span style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",color:C.sub,pointerEvents:"none",fontSize:11}}>∨</span></div>;}
 function StepBar({cur,total=4}){return<div style={{display:"flex",gap:6,marginBottom:20}}>{Array.from({length:total},(_,i)=><div key={i} style={{flex:i===cur?2:1,height:4,borderRadius:2,background:i<=cur?C.acc:C.bdr,transition:"all 0.3s"}}/>)}</div>;}
 
-// Sheet - position:fixed, viewport 기준 (모바일에서 완벽 동작)
 function Sheet({title,onClose,children}){
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"flex-end",zIndex:9999}} onClick={onClose}>
@@ -82,7 +81,6 @@ function LineChart({data}){
   return<svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H}}><path d={area} fill={C.acc+"18"}/><polyline points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke={C.acc} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>{pts.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="3" fill={C.acc}/>)}</svg>;
 }
 
-// ── 페이지들 ──────────────────────────────────────────────────
 function SplashPage({onStart}){
   const [slide,setSlide]=useState(0);
   const slides=[{title:"발주 업무,\n이제 자동으로",desc:"수기 계산·카카오톡 개별 발주\n이제 그만!",icon:"📋"},{title:"BOM 기반\n소요량 자동 계산",desc:"상품별 원부자재를 등록하면\n소요량이 자동 계산됩니다.",icon:"🧮"},{title:"거래처별\n원클릭 발송",desc:"업체별 발주서를 자동 생성하고\n이메일로 즉시 발송합니다.",icon:"📧"},{title:"발주 이력\n데이터화",desc:"모든 발주가 DB에 저장되어\n언제든 조회 가능합니다.",icon:"📊"}];
@@ -199,12 +197,10 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     const o={items,status:"진행중",date:today(),ts:new Date().toISOString()};
     try{if(user?.token){const r=await DB.insert(user.token,"orders",{...o,user_id:user.id});setOrders(p=>[...p,Array.isArray(r)?r[0]:{...o,id:uid()}]);}else setOrders(p=>[...p,{...o,id:uid()}]);}catch{setOrders(p=>[...p,{...o,id:uid()}]);}
     try{localStorage.removeItem(DRAFT);}catch{}
-    // 이메일 자동 발송
     await sendMail();
     setStep(3);
   }
   async function sendMail(){
-    // 거래처별로 발주서 묶기
     const venMap={};
     for(const it of items){
       const prod=products.find(x=>x.id===it.pid);
@@ -218,30 +214,19 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       }
     }
     const targets=Object.values(venMap).filter(v=>v.vendor.email);
-    if(!targets.length){return;}
+    if(!targets.length)return;
     setSending(true);let cnt=0;
     for(const{vendor,lines,prod}of targets){
-      // 원하는 형식으로 본문 작성
-      const companyName = user?.company||"디자인워커스";
+      const companyName=user?.company||"디자인워커스";
       const p=lines[0]?.prod;
-      // EmailJS 템플릿에 인사말이 있으므로 본문에는 내용만
-      let body = `업체명 : ${companyName}\n\n`;
-      // 원단별로 묶기
+      let body=`업체명 : ${companyName}\n\n`;
       const matMap={};
-      for(const l of lines){
-        if(!matMap[l.mat])matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};
-        matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);
-      }
-      for(const m of Object.values(matMap)){
-        body+=`${m.mat}\n`;
-        m.colors.forEach(c=>{body+=`${c}\n`;});
-        body+=`\n`;
-      }
+      for(const l of lines){if(!matMap[l.mat])matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);}
+      for(const m of Object.values(matMap)){body+=`${m.mat}\n`;m.colors.forEach(c=>{body+=`${c}\n`;});body+=`\n`;}
       body+=`품목 : ${p?.name||"-"}\n\n`;
       body+=`입고처 : ${p?.factory||"-"}\n`;
-      // 공장 주소 추가 - factories 배열에서 찾기
-      const factoryObj = factories?.find(f=>f.name===p?.factory);
-      if(factoryObj?.address) body+=`주소 : ${factoryObj.address}\n`;
+      const factoryObj=factories?.find(f=>f.name===p?.factory);
+      body+=`주소 : ${factoryObj?.address||"-"}\n`;
       body+=`연락처 : ${p?.factoryTel||"-"}\n\n`;
       body+=`감사합니다 문제 있으면 피드백 주세요.`;
       if(await sendEmail(vendor.email,vendor.name,`[D-Works 발주서] ${today()} - ${vendor.name}`,body))cnt++;
@@ -322,11 +307,11 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
         <FCard><FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow><FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow><FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow></FCard>
         {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
+        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>업체 정보</div>
+        <FCard mb={12}><FRow label="업체명" last><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>v.name?.includes(venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow></FCard>
         <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>원단 정보</div>
         <FCard><FRow label="원단명"><FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/></FRow><FRow label="색상"><div style={{flex:1,display:"flex",flexWrap:"wrap",gap:4,justifyContent:"flex-end",alignItems:"center",padding:"4px 0"}}>{f.colors.map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 7px",fontSize:11,display:"flex",alignItems:"center",gap:3,border:`1px solid ${C.bdr}`}}>{c}<button onClick={()=>setF(p=>({...p,colors:p.colors.filter(x=>x!==c)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:10,padding:0}}>✕</button></span>)}<div style={{display:"flex",gap:4}}><input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="추가" style={{width:48,border:`1px solid ${C.bdr}`,borderRadius:6,padding:"2px 6px",fontSize:11,fontFamily:C.fn,outline:"none",textAlign:"center"}}/><button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:6,padding:"2px 8px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.fn}}>+</button></div></div></FRow><FRow label="소요량"><FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>yd</span></FRow><FRow label="단가" last><FInp val={br.price||""} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>원</span></FRow></FCard>
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>{MAT_TYPES.map(t=>{const act=br.type===t;return<button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>업체 정보</div>
-        <FCard mb={8}><FRow label="업체명" last><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>v.name?.includes(venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow></FCard>
         {f.bom.length>0&&f.bom.map(b=>{const ven=vendors.find(v=>v.id===b.vid);const isE=editBomId===b.id;return<div key={b.id} style={{background:isE?C.acc+"10":C.bg,borderRadius:8,padding:"9px 12px",marginBottom:6,border:`1.5px solid ${isE?C.acc:C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{flex:1,minWidth:0}}><span style={{background:C.acc+"15",color:C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,marginRight:6}}>{b.type||"원단"}</span><span style={{fontWeight:700,fontSize:12}}>{b.mat}</span><span style={{color:C.sub,fontSize:11,marginLeft:6}}>{b.amt}yd</span>{ven&&<span style={{color:C.sub,fontSize:11,marginLeft:4}}>· {ven.name}</span>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>{if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||""});const ev=vendors.find(v=>v.id===b.vid);setVenSearch(ev?.name||"");}}} style={{background:"none",border:"none",color:isE?C.acc:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:C.fn}}>{isE?"취소":"수정"}</button><button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div></div></div>;})}
         <Btn ch={editBomId?"✓ 수정 완료":"+ 원부자재 추가"} v={editBomId?"p":"w"} full st={{marginBottom:18}} onClick={addBom}/>
         <div style={{display:"flex",gap:10}}><Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={save} disabled={!f.name}/></div>
@@ -411,7 +396,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   );
 }
 
-// ── App ───────────────────────────────────────────────────────
 export default function App(){
   const [screen,setScreen]=useState("loading");
   const [user,setUser]=useState(null);
@@ -426,9 +410,7 @@ export default function App(){
     setLoading(true);
     try{
       const[v,f,p,o]=await Promise.all([DB.list(token,"vendors"),DB.list(token,"factories"),DB.list(token,"products"),DB.list(token,"orders")]);
-      // 401 토큰 만료 체크
       if(v?.code==="PGRST301"||v?.message?.includes("JWT")||o?.code==="PGRST301"){
-        console.log("Token expired, logging out");
         try{localStorage.removeItem("dworks_session");}catch{}
         setUser(null);setScreen("auth");setLoading(false);return;
       }
@@ -437,8 +419,6 @@ export default function App(){
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],bom:x.bom||[]})):[]);
       setOrders(Array.isArray(o)?o:[]);
     }catch(e){
-      console.error(e);
-      // 네트워크 오류 시에도 로그아웃
       try{localStorage.removeItem("dworks_session");}catch{}
       setUser(null);setScreen("auth");
     }
@@ -452,7 +432,6 @@ export default function App(){
         if(s){
           const u=JSON.parse(s);
           if(u?.token){
-            // 토큰 유효성 확인
             const r=await fetch(`${SB}/auth/v1/user`,{headers:{"apikey":KEY,"Authorization":`Bearer ${u.token}`}});
             if(r.ok){setUser(u);setScreen("app");loadData(u.token);return;}
             else{localStorage.removeItem("dworks_session");}
@@ -469,7 +448,6 @@ export default function App(){
 
   const TABS=[{k:"order",i:"📝",l:"발주하기"},{k:"prods",i:"👕",l:"상품"},{k:"list",i:"📋",l:"발주리스트"},{k:"vendors",i:"🏭",l:"거래처"},{k:"settings",i:"⚙️",l:"설정"}];
 
-  // 로딩
   if(screen==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#fff",fontFamily:C.fn}}><div style={{textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:C.acc,marginBottom:12}}>D-Works</div><div style={{width:32,height:32,border:`3px solid ${C.bdr}`,borderTop:`3px solid ${C.acc}`,borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div></div>;
   if(screen==="splash")return<SplashPage onStart={()=>setScreen("auth")}/>;
   if(screen!=="app"||!user)return<AuthPage onLogin={handleLogin}/>;
