@@ -216,7 +216,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
         
         if(r.error || r.code || !Array.isArray(r) || r.length === 0) { 
-          alert(`[발주 저장 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message || '세션 만료 또는 권한 없음'}`); 
+          alert(`[발주 저장 실패] DB 에러입니다.\n사유: ${r.message}`); 
           setSending(false); 
           return; 
         }
@@ -355,32 +355,20 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
   }
 
-  // 상품 저장(가짜 저장 방지 및 color_bom으로 통일)
   async function save(){
     if(!f.name)return;
-    const sd={
-      name:f.name,
-      category:f.category,
-      season:f.season,
-      factory_id:f.factoryId||null,
-      factory:f.factory,
-      factory_tel:f.factoryTel,
-      colors:f.colors,
-      color_bom:f.colorBom
-    };
+    // DB 규칙에 맞게 color_bom을 전달하도록 수정
+    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId||null,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
     try{
       if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){
-          alert(`[상품 수정 실패] Supabase products 테이블에 color_bom 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
-          return;
-        }
+        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
       else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] Supabase products 테이블에 color_bom 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
+          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);
           return;
         }
         const newProd = r[0];
