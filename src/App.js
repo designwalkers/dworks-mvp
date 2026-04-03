@@ -194,6 +194,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
   
+  // 수정 핵심: DB에서 저장을 거부하면 즉시 중단하고 화면 업데이트도 하지 않음
   async function submit(){
     if(!items.length){alert("발주 항목 추가");return;}
     setSending(true);
@@ -209,28 +210,28 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     const newOrders = [];
 
     for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      // 수정된 부분: DB 에러 방지 (memo 제외)
+      // 메모는 DB에 없으므로 빼고 전송
       const o = { items: groupItems, status: "진행중", date: d, ts };
       try{
-        if(user?.token){
-          const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
-          // 에러가 발생하면 화면에 알림창 띄우고 저장 로직 중단
-          if(r.error || r.code) { 
-            alert(`발주 저장 에러: ${r.message || JSON.stringify(r)}`); 
-            setSending(false); 
-            return; 
-          }
-          newOrders.push(Array.isArray(r) ? r[0] : {...o, id: uid()});
-        }else{
-          newOrders.push({...o, id: uid()});
+        if(!user?.token) { alert("로그인 정보가 없습니다. 다시 로그인해주세요."); setSending(false); return; }
+        
+        const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
+        
+        // 에러를 발견하면 즉시 알림을 띄우고 저장 중단 (가짜 저장 방지)
+        if(r.error || r.code || !Array.isArray(r) || r.length === 0) { 
+          alert(`[발주 저장 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message || '세션 만료 또는 권한 없음'}`); 
+          setSending(false); 
+          return; 
         }
+        newOrders.push(r[0]);
       }catch(e){
-        alert("네트워크 에러가 발생했습니다.");
+        alert("[네트워크 에러] 발주가 저장되지 않았습니다. 인터넷 연결을 확인하세요.");
         setSending(false);
         return;
       }
     }
 
+    // 성공한 경우에만 로컬 화면에 반영
     setOrders(p => [...newOrders, ...p]);
     try{localStorage.removeItem(DRAFT);}catch{}
     await sendMail();
@@ -358,25 +359,29 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
   }
 
-  // 수정된 부분: 에러 발생 시 알림창 띄우기 및 factoryId가 빈 문자열일 때 null로 처리
+  // 수정 핵심: DB 실패 시 화면을 가짜로 업데이트하지 않음
   async function save(){
     if(!f.name)return;
+    // 빈 글자("")가 DB 형식 충돌을 일으키지 않도록 null 처리
     const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId||null,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
     try{
       if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`상품 수정 에러: ${r.message||JSON.stringify(r)}`);return;}
+        if(r.error||r.code){alert(`[상품 수정 실패] ${r.message||'다시 로그인해주세요.'}`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
       else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
-        if(r.error||r.code){alert(`상품 저장 에러: ${r.message||JSON.stringify(r)}`);return;}
-        setProducts(p=>[...p,Array.isArray(r)?{...r[0],factoryId:r[0].factory_id||"",factoryTel:r[0].factory_tel||"",colors:r[0].colors||[],colorBom:r[0].color_bom||{}}:{...f,id:uid()}]);
+        if(r.error||r.code||!Array.isArray(r)||r.length===0){
+          alert(`[상품 등록 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message||'권한 없음'}`);
+          return;
+        }
+        const newProd = r[0];
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
       }
-      else{setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);}
     }catch(e){
-      alert("네트워크 에러가 발생했습니다.");
-      setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);
+      alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
+      return;
     }
     setSheet(false);
   }
@@ -482,7 +487,30 @@ function VendorPage({vendors,setVendors,user}){
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   function openAdd(){setF({name:"",tel:"",email:"",type:"원단"});setEditId(null);setSheet(true);}
   function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
-  async function save(){if(!f.name)return;try{if(editId){if(user?.token)await DB.update(user.token,"vendors",editId,{name:f.name,tel:f.tel,email:f.email,type:f.type});setVendors(vv=>vv.map(v=>v.id===editId?{...v,...f}:v));}else{if(user?.token){const r=await DB.insert(user.token,"vendors",{name:f.name,tel:f.tel,email:f.email,type:f.type,user_id:user.id});setVendors(vv=>[...vv,Array.isArray(r)?r[0]:{...f,id:uid()}]);}else setVendors(vv=>[...vv,{...f,id:uid()}]);}}catch{setVendors(editId?vv=>vv.map(v=>v.id===editId?{...v,...f}:v):vv=>[...vv,{...f,id:uid()}]);}setSheet(false);}
+
+  // 거래처 저장 에러 방지
+  async function save(){
+    if(!f.name)return;
+    try{
+      if(editId){
+        if(user?.token){
+          const r=await DB.update(user.token,"vendors",editId,{name:f.name,tel:f.tel,email:f.email,type:f.type});
+          if(r.error||r.code){alert(`[거래처 수정 실패] ${r.message||''}`);return;}
+        }
+        setVendors(vv=>vv.map(v=>v.id===editId?{...v,...f}:v));
+      }else{
+        if(user?.token){
+          const r=await DB.insert(user.token,"vendors",{name:f.name,tel:f.tel,email:f.email,type:f.type,user_id:user.id});
+          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[거래처 추가 실패] 다시 로그인해주세요.`);return;}
+          setVendors(vv=>[...vv, r[0]]);
+        }
+      }
+    }catch(e){
+      alert("[네트워크 에러] 거래처 저장에 실패했습니다."); return;
+    }
+    setSheet(false);
+  }
+
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"vendors",id);}catch{}setVendors(vv=>vv.filter(x=>x.id!==id));}
   return(
     <div style={{padding:"14px 14px 80px"}}>
@@ -504,7 +532,31 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [profileSheet,setProfileSheet]=useState(false);
   const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||""});
   async function saveProfile(){try{if(user?.token)await DB.updateUser(user.token,{name:pf.name,company:pf.company,tel:pf.tel});}catch{}if(setUser)setUser(u=>({...u,...pf}));setProfileSheet(false);alert("저장되었습니다!");}
-  async function saveFac(){if(!facSheet.name)return;const{id,...data}=facSheet;try{if(id){if(user?.token)await DB.update(user.token,"factories",id,{...data,biz_type:data.bizType});setFactories(ff=>ff.map(x=>x.id===id?{...x,...data}:x));}else{if(user?.token){const r=await DB.insert(user.token,"factories",{name:data.name,biz_type:data.bizType,address:data.address,tel:data.tel,account:data.account,user_id:user.id});setFactories(ff=>[...ff,Array.isArray(r)?{...r[0],bizType:r[0].biz_type||""}:{...data,id:uid()}]);}else setFactories(ff=>[...ff,{...data,id:uid()}]);}}catch{setFactories(id?ff=>ff.map(x=>x.id===id?{...x,...data}:x):ff=>[...ff,{...data,id:uid()}]);}setFacSheet(null);}
+  
+  // 공장 저장 에러 방지
+  async function saveFac(){
+    if(!facSheet.name)return;
+    const{id,...data}=facSheet;
+    try{
+      if(id){
+        if(user?.token){
+          const r=await DB.update(user.token,"factories",id,{...data,biz_type:data.bizType});
+          if(r.error||r.code){alert(`[공장 수정 실패] ${r.message}`); return;}
+        }
+        setFactories(ff=>ff.map(x=>x.id===id?{...x,...data}:x));
+      }else{
+        if(user?.token){
+          const r=await DB.insert(user.token,"factories",{name:data.name,biz_type:data.bizType,address:data.address,tel:data.tel,account:data.account,user_id:user.id});
+          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[공장 추가 실패] 다시 로그인해주세요.`); return;}
+          setFactories(ff=>[...ff,{...r[0],bizType:r[0].biz_type||""}]);
+        }
+      }
+    }catch(e){
+      alert("[네트워크 에러] 공장 저장에 실패했습니다."); return;
+    }
+    setFacSheet(null);
+  }
+
   async function delFac(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"factories",id);}catch{}setFactories(ff=>ff.filter(x=>x.id!==id));}
   return(
     <div style={{padding:"14px 14px 80px"}}>
