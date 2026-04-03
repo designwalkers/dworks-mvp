@@ -137,12 +137,32 @@ function AuthPage({onLogin}){
         if(r.error){setErr(r.error.message.includes("already")?"이미 가입된 이메일":r.error.message);return;}
         const r2=await DB.signIn(f.email,f.pw);
         if(!r2.access_token){setErr("가입완료! 로그인해주세요");setTab("in");return;}
-        onLogin({token:r2.access_token,id:r2.user.id,name:f.name,company:f.company,email:f.email,tel:f.tel});
+        onLogin({
+          token:r2.access_token,
+          id:r2.user.id,
+          name:f.name,
+          company:f.company,
+          email:f.email,
+          tel:f.tel,
+          brand:f.brand,
+          position:f.position,
+          address:f.address
+        });
       }else{
         const r=await DB.signIn(f.email,f.pw);
         if(!r.access_token){const msg=r.error?.message||"";setErr(msg.includes("Invalid")||msg.includes("invalid")?"이메일 또는 비밀번호가 틀렸습니다":msg||"로그인 실패");return;}
         const meta=r.user?.user_metadata||{};
-        onLogin({token:r.access_token,id:r.user.id,name:meta.name||f.email.split("@")[0],company:meta.company||"",email:r.user.email,tel:meta.tel||""});
+        onLogin({
+          token:r.access_token,
+          id:r.user.id,
+          name:meta.name||f.email.split("@")[0],
+          company:meta.company||"",
+          email:r.user.email,
+          tel:meta.tel||"",
+          brand:meta.brand||"",
+          position:meta.position||"",
+          address:meta.address||""
+        });
       }
     }catch(e){setErr("네트워크 오류");}
     finally{setLoading(false);}
@@ -625,11 +645,36 @@ function VendorPage({vendors,setVendors,user}){
 function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [facSheet,setFacSheet]=useState(null);
   const [profileSheet,setProfileSheet]=useState(false);
-  const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||""});
-  async function saveProfile(){try{if(user?.token)await DB.updateUser(user.token,{name:pf.name,company:pf.company,tel:pf.tel});}catch{}if(setUser)setUser(u=>({...u,...pf}));setProfileSheet(false);alert("저장되었습니다!");}
-  
-  // 수정된 부분: 공장 저장 로직에 사업자 등록번호(bizNo) 추가
-  async function saveFac(){
+
+  // 프로필 상태에 회원가입 시 추가한 모든 정보 연동
+  const [pf,setPf]=useState({
+    name:user.name||"",
+    company:user.company||"",
+    tel:user.tel||"",
+    brand:user.brand||"",
+    position:user.position||"",
+    address:user.address||""
+  });
+
+  async function saveProfile(){
+    try{
+      if(user?.token) {
+        await DB.updateUser(user.token, {
+          name:pf.name,
+          company:pf.company,
+          tel:pf.tel,
+          brand:pf.brand,
+          position:pf.position,
+          address:pf.address
+        });
+      }
+    }catch{}
+    if(setUser)setUser(u=>({...u,...pf}));
+    setProfileSheet(false);
+    alert("저장되었습니다!");
+  }
+
+  async function saveFac(){
     if(!facSheet.name)return;
     const{id,...data}=facSheet;
     try{
@@ -656,7 +701,15 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{fontWeight:900,fontSize:20,marginBottom:18}}>환경설정</div>
       <Card st={{marginBottom:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:44,height:44,borderRadius:22,background:C.acc+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>👤</div><div style={{flex:1}}><div style={{fontWeight:800,fontSize:14}}>{user.name||"이름 없음"}</div><div style={{color:C.sub,fontSize:12,marginTop:2}}>{user.email}</div>{user.company&&<div style={{color:C.sub,fontSize:11}}>{user.company}</div>}</div><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>setProfileSheet(true)}/></div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:44,height:44,borderRadius:22,background:C.acc+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>👤</div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:800,fontSize:14}}>{user.name||"이름 없음"} {user.position && <span style={{fontSize:12, fontWeight:500, color:C.sub}}>{user.position}</span>}</div>
+            <div style={{color:C.sub,fontSize:12,marginTop:2}}>{user.email}</div>
+            {user.company&&<div style={{color:C.sub,fontSize:11}}>{user.company} {user.brand ? `(${user.brand})` : ''}</div>}
+          </div>
+          <Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>setProfileSheet(true)}/>
+        </div>
         <Divider/><Btn ch="로그아웃" v="w" full st={{color:C.red}} onClick={onLogout}/>
       </Card>
       <Card>
@@ -672,10 +725,15 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
         <Field label="계좌번호"><TxtInp val={facSheet.account||""} onChange={v=>setFacSheet(p=>({...p,account:v}))} ph="은행명 계좌번호 예금주"/></Field>
         <G/><div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setFacSheet(null)}/><Btn ch="저장" full st={{flex:2}} onClick={saveFac}/></div>
       </Sheet>}
+      
+      {/* 프로필 수정 폼에 확장된 필드들 추가 */}
       {profileSheet&&<Sheet title="프로필 수정" onClose={()=>setProfileSheet(false)}>
-        <Field label="이름" req><TxtInp val={pf.name} onChange={v=>setPf(p=>({...p,name:v}))} ph="이름"/></Field>
-        <Field label="업체명"><TxtInp val={pf.company} onChange={v=>setPf(p=>({...p,company:v}))} ph="업체명"/></Field>
-        <Field label="연락처"><TxtInp val={pf.tel} onChange={v=>setPf(p=>({...p,tel:v}))} ph="010-0000-0000" type="tel"/></Field>
+        <Field label="업체명" req><TxtInp val={pf.company} onChange={v=>setPf(p=>({...p,company:v}))} ph="회사명을 입력하세요"/></Field>
+        <Field label="브랜드명"><TxtInp val={pf.brand} onChange={v=>setPf(p=>({...p,brand:v}))} ph="브랜드명을 입력하세요 (선택)"/></Field>
+        <Field label="성함" req><TxtInp val={pf.name} onChange={v=>setPf(p=>({...p,name:v}))} ph="성함을 입력하세요"/></Field>
+        <Field label="직함" req><TxtInp val={pf.position} onChange={v=>setPf(p=>({...p,position:v}))} ph="예: 대표, 팀장, 매니저"/></Field>
+        <Field label="연락처" req><TxtInp val={pf.tel} onChange={v=>setPf(p=>({...p,tel:v}))} ph="010-0000-0000" type="tel"/></Field>
+        <Field label="사무실 주소"><TxtInp val={pf.address} onChange={v=>setPf(p=>({...p,address:v}))} ph="주소를 입력하세요"/></Field>
         <G/><div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setProfileSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={saveProfile}/></div>
       </Sheet>}
     </div>
@@ -701,7 +759,6 @@ export default function App(){
         setUser(null);setScreen("auth");setLoading(false);return;
       }
       setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
-      // 수정된 부분: factories 데이터를 가져올 때 biz_no도 프론트엔드 형식에 맞게 매핑
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[]})):[]);
       setOrders(Array.isArray(o)?o:[]);
