@@ -194,7 +194,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
   
-  // 수정 핵심: DB에서 저장을 거부하면 즉시 중단하고 화면 업데이트도 하지 않음
   async function submit(){
     if(!items.length){alert("발주 항목 추가");return;}
     setSending(true);
@@ -210,14 +209,12 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     const newOrders = [];
 
     for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      // 메모는 DB에 없으므로 빼고 전송
       const o = { items: groupItems, status: "진행중", date: d, ts };
       try{
         if(!user?.token) { alert("로그인 정보가 없습니다. 다시 로그인해주세요."); setSending(false); return; }
         
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
         
-        // 에러를 발견하면 즉시 알림을 띄우고 저장 중단 (가짜 저장 방지)
         if(r.error || r.code || !Array.isArray(r) || r.length === 0) { 
           alert(`[발주 저장 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message || '세션 만료 또는 권한 없음'}`); 
           setSending(false); 
@@ -231,7 +228,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       }
     }
 
-    // 성공한 경우에만 로컬 화면에 반영
     setOrders(p => [...newOrders, ...p]);
     try{localStorage.removeItem(DRAFT);}catch{}
     await sendMail();
@@ -359,12 +355,10 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
   }
 
-// 수정 핵심: DB 실패 시 화면을 가짜로 업데이트하지 않음 + DB 컬럼명 복구
-  async function save(){
-    if(!f.name)return;
-    
-    // 이 부분에서 color_bom을 다시 colorBom으로 되돌렸습니다!
-    const sd={
+  // 상품 저장(가짜 저장 방지 및 color_bom으로 통일)
+  async function save(){
+    if(!f.name)return;
+    const sd={
       name:f.name,
       category:f.category,
       season:f.season,
@@ -372,30 +366,32 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
       factory:f.factory,
       factory_tel:f.factoryTel,
       colors:f.colors,
-      colorBom:f.colorBom 
+      color_bom:f.colorBom
     };
-
-    try{
-      if(f.id&&user?.token){
+    try{
+      if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`[상품 수정 실패] ${r.message||'다시 로그인해주세요.'}`);return;}
+        if(r.error||r.code){
+          alert(`[상품 수정 실패] Supabase products 테이블에 color_bom 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
+          return;
+        }
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
-      else if(user?.token){
+      else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message||'권한 없음'}`);
+          alert(`[상품 등록 실패] Supabase products 테이블에 color_bom 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
           return;
         }
         const newProd = r[0];
-        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.colorBom||newProd.color_bom||{}}]);
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
       }
-    }catch(e){
+    }catch(e){
       alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
       return;
     }
-    setSheet(false);
-  }
+    setSheet(false);
+  }
 
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"products",id);}catch{}setProducts(products.filter(p=>p.id!==id));}
 
@@ -498,8 +494,6 @@ function VendorPage({vendors,setVendors,user}){
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   function openAdd(){setF({name:"",tel:"",email:"",type:"원단"});setEditId(null);setSheet(true);}
   function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
-
-  // 거래처 저장 에러 방지
   async function save(){
     if(!f.name)return;
     try{
@@ -521,7 +515,6 @@ function VendorPage({vendors,setVendors,user}){
     }
     setSheet(false);
   }
-
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"vendors",id);}catch{}setVendors(vv=>vv.filter(x=>x.id!==id));}
   return(
     <div style={{padding:"14px 14px 80px"}}>
@@ -543,9 +536,7 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [profileSheet,setProfileSheet]=useState(false);
   const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||""});
   async function saveProfile(){try{if(user?.token)await DB.updateUser(user.token,{name:pf.name,company:pf.company,tel:pf.tel});}catch{}if(setUser)setUser(u=>({...u,...pf}));setProfileSheet(false);alert("저장되었습니다!");}
-  
-  // 공장 저장 에러 방지
-  async function saveFac(){
+  async function saveFac(){
     if(!facSheet.name)return;
     const{id,...data}=facSheet;
     try{
@@ -567,7 +558,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
     }
     setFacSheet(null);
   }
-
   async function delFac(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"factories",id);}catch{}setFactories(ff=>ff.filter(x=>x.id!==id));}
   return(
     <div style={{padding:"14px 14px 80px"}}>
