@@ -216,7 +216,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
         
         if(r.error || r.code || !Array.isArray(r) || r.length === 0) { 
-          alert(`[발주 저장 실패] DB 에러입니다.\n사유: ${r.message}`); 
+          alert(`[발주 저장 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message || '세션 만료 또는 권한 없음'}`); 
           setSending(false); 
           return; 
         }
@@ -357,22 +357,31 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 
   async function save(){
     if(!f.name)return;
-    // DB 규칙에 맞게 color_bom을 전달하도록 수정
-    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId||null,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
+    const sd={
+      name:f.name,
+      category:f.category,
+      season:f.season,
+      factory_id:f.factoryId||null,
+      factory:f.factory,
+      factory_tel:f.factoryTel,
+      colors:f.colors,
+      colorBom:f.colorBom 
+    };
+
     try{
       if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);return;}
+        if(r.error||r.code){alert(`[상품 수정 실패] ${r.message||'다시 로그인해주세요.'}`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
       else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);
+          alert(`[상품 등록 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message||'권한 없음'}`);
           return;
         }
         const newProd = r[0];
-        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.colorBom||newProd.color_bom||{}}]);
       }
     }catch(e){
       alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
@@ -461,14 +470,48 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 
 function ListPage({orders,setOrders,products,user}){
   const [filter,setFilter]=useState("전체");
+  const [dateFilter,setDateFilter]=useState("전체");
+  const [startDate,setStartDate]=useState("");
+  const [endDate,setEndDate]=useState("");
   const [open,setOpen]=useState(null);
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
-  const filtered=(filter==="전체"?orders:orders.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
+
+  const getPastDate = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0,10);
+  };
+  const tToday = today();
+  const tYest = getPastDate(1);
+  const tWeek = getPastDate(7);
+
+  let dateFiltered = orders;
+  if (dateFilter === "오늘") dateFiltered = orders.filter(o => o.date === tToday);
+  else if (dateFilter === "어제") dateFiltered = orders.filter(o => o.date === tYest);
+  else if (dateFilter === "1주일") dateFiltered = orders.filter(o => o.date >= tWeek && o.date <= tToday);
+  else if (dateFilter === "기간설정") {
+    dateFiltered = orders.filter(o => {
+      if(startDate && endDate) return o.date >= startDate && o.date <= endDate;
+      if(startDate) return o.date >= startDate;
+      if(endDate) return o.date <= endDate;
+      return true;
+    });
+  }
+
+  const filtered=(filter==="전체"?dateFiltered:dateFiltered.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
+
   async function changeStatus(id,status){if(user?.token)try{await DB.update(user.token,"orders",id,{status});}catch{}setOrders(p=>p.map(x=>x.id===id?{...x,status}:x));}
   async function delOrder(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"orders",id);}catch{}setOrders(p=>p.filter(x=>x.id!==id));}
   return(
     <div style={{padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>발주 리스트</div><Tag ch={`${orders.length}건`} c={C.sub}/></div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div>
+        <Tag ch={`${filtered.length}건`} c={C.sub}/>
+      </div>
+      <div style={{display:"flex",gap:7,marginBottom:dateFilter==="기간설정"?8:12,overflowX:"auto",paddingBottom:4}}>
+        {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>setDateFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{s}</button>)}
+      </div>
+      {dateFilter==="기간설정"&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/><span style={{color:C.sub}}>-</span><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/></div>}
       <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{["전체","진행중","완료","지연"].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{s}</button>)}</div>
       {filtered.length===0?<Empty icon="📋" text="발주 내역이 없습니다"/>:filtered.map(o=>{const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);const isO=open===o.id;return<Card key={o.id} st={{marginBottom:10,cursor:"pointer"}} onClick={()=>setOpen(isO?null:o.id)}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:13,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{Array.from(new Set((o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-"))).join(", ")}</div><div style={{color:C.sub,fontSize:11}}>{o.date} · {fmtN(tot)}장</div></div><div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,marginLeft:8}}><Tag ch={o.status} c={SC[o.status]||C.sub}/><span style={{color:C.sub,fontSize:12}}>{isO?"▲":"▼"}</span></div></div>{isO&&<div onClick={e=>e.stopPropagation()}><Divider/>{(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.bdr}`,fontSize:12}}><span style={{fontWeight:600}}>{p?.name}</span><span>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}<div style={{display:"flex",gap:7,marginTop:10,flexWrap:"wrap"}}>{["진행중","완료","지연"].map(st=><Btn key={st} ch={st} sz="s" st={{padding:"5px 11px",background:o.status===st?(SC[st]||C.acc):"#fff",color:o.status===st?"#fff":(SC[st]||C.sub2),border:`1.5px solid ${SC[st]||C.bdr}`,fontSize:12}} onClick={()=>changeStatus(o.id,st)}/>)}<Btn ch="삭제" sz="s" v="w" st={{marginLeft:"auto",color:C.red,fontSize:12,padding:"5px 11px"}} onClick={()=>delOrder(o.id)}/></div></div>}</Card>;})}
     </div>
