@@ -209,17 +209,25 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     const newOrders = [];
 
     for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      // 수정된 부분: DB 에러를 막기 위해 DB에 저장할 때 memo 데이터는 제외합니다.
+      // 수정된 부분: DB 에러 방지 (memo 제외)
       const o = { items: groupItems, status: "진행중", date: d, ts };
       try{
         if(user?.token){
           const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
+          // 에러가 발생하면 화면에 알림창 띄우고 저장 로직 중단
+          if(r.error || r.code) { 
+            alert(`발주 저장 에러: ${r.message || JSON.stringify(r)}`); 
+            setSending(false); 
+            return; 
+          }
           newOrders.push(Array.isArray(r) ? r[0] : {...o, id: uid()});
         }else{
           newOrders.push({...o, id: uid()});
         }
-      }catch{
-        newOrders.push({...o, id: uid()});
+      }catch(e){
+        alert("네트워크 에러가 발생했습니다.");
+        setSending(false);
+        return;
       }
     }
 
@@ -350,14 +358,26 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
   }
 
+  // 수정된 부분: 에러 발생 시 알림창 띄우기 및 factoryId가 빈 문자열일 때 null로 처리
   async function save(){
     if(!f.name)return;
-    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
+    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId||null,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
     try{
-      if(f.id&&user?.token){await DB.update(user.token,"products",f.id,sd);setProducts(products.map(p=>p.id===f.id?{...f}:p));}
-      else if(user?.token){const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});setProducts(p=>[...p,Array.isArray(r)?{...r[0],factoryId:r[0].factory_id||"",factoryTel:r[0].factory_tel||"",colors:r[0].colors||[],colorBom:r[0].color_bom||{}}:{...f,id:uid()}]);}
+      if(f.id&&user?.token){
+        const r=await DB.update(user.token,"products",f.id,sd);
+        if(r.error||r.code){alert(`상품 수정 에러: ${r.message||JSON.stringify(r)}`);return;}
+        setProducts(products.map(p=>p.id===f.id?{...f}:p));
+      }
+      else if(user?.token){
+        const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
+        if(r.error||r.code){alert(`상품 저장 에러: ${r.message||JSON.stringify(r)}`);return;}
+        setProducts(p=>[...p,Array.isArray(r)?{...r[0],factoryId:r[0].factory_id||"",factoryTel:r[0].factory_tel||"",colors:r[0].colors||[],colorBom:r[0].color_bom||{}}:{...f,id:uid()}]);
+      }
       else{setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);}
-    }catch{setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);}
+    }catch(e){
+      alert("네트워크 에러가 발생했습니다.");
+      setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);
+    }
     setSheet(false);
   }
 
