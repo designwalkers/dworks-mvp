@@ -205,7 +205,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     for(const it of items){
       const prod=products.find(x=>x.id===it.pid);
       if(!prod)continue;
-      for(const b of(prod.bom||[])){
+      const bomList=prod.colorBom?.[it.color]||prod.bom||[];
+      for(const b of bomList){
         const ven=vendors.find(v=>v.id===b.vid);
         if(!ven)continue;
         const soyo=Math.round(b.amt*it.qty*100)/100;
@@ -271,23 +272,50 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
 function ProdsPage({products,setProducts,vendors,factories,user}){
   const [catF,setCatF]=useState("전체");
   const [sheet,setSheet]=useState(false);
-  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});
+  const [sheetStep,setSheetStep]=useState(0);
+  const [selColor,setSelColor]=useState("");
+  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});
   const [ci,setCi]=useState("");
-  const [br,setBr]=useState({type:"",mat:"",amt:"",vid:"",color:""});
+  const [br,setBr]=useState({type:"",mat:"",amt:"",vid:"",price:""});
   const [editBomId,setEditBomId]=useState(null);
   const [venSearch,setVenSearch]=useState("");
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
-  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],bom:[]});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");setSheet(true);}
-  function openEdit(p){setF({...p,colors:[...(p.colors||[])],bom:(p.bom||[]).map(b=>({...b}))});setCi("");setBr({type:"",mat:"",amt:"",vid:""});setVenSearch("");setSheet(true);}
-  function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c]}));setCi("");}
-  function addBom(){if(!br.mat||!br.amt)return;if(editBomId){setF(p=>({...p,bom:p.bom.map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt)}:b)}));setEditBomId(null);}else setF(p=>({...p,bom:[...p.bom,{...br,id:uid(),amt:Number(br.amt)}]}));setBr({type:"",mat:"",amt:"",vid:"",color:""});setVenSearch("");}
+
+  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+
+  function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c],colorBom:{...p.colorBom,[c]:p.colorBom[c]||[]}}));setCi("");}
+  function removeColor(c){setF(p=>{const nb={...p.colorBom};delete nb[c];return{...p,colors:p.colors.filter(x=>x!==c),colorBom:nb};});if(selColor===c)setSelColor("");}
+
+  function goToStep1(){
+    if(!f.name||f.colors.length===0){alert("상품명과 색상을 하나 이상 입력하세요");return;}
+    setF(p=>{const nb={...p.colorBom};p.colors.forEach(c=>{if(!nb[c])nb[c]=[];});return{...p,colorBom:nb};});
+    setSelColor(f.colors[0]);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setEditBomId(null);setSheetStep(1);
+  }
+
+  function addBom(){
+    if(!br.mat||!br.amt)return;
+    if(editBomId){setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt)}:b)}}));setEditBomId(null);}
+    else{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:[...(p.colorBom[selColor]||[]),{...br,id:uid(),amt:Number(br.amt)}]}}));}
+    setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
+  }
+
   async function save(){
     if(!f.name)return;
-    try{if(f.id&&user?.token){await DB.update(user.token,"products",f.id,{name:f.name,category:f.category,season:f.season,factory_id:f.factoryId,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,bom:f.bom});setProducts(products.map(p=>p.id===f.id?f:p));}else if(user?.token){const r=await DB.insert(user.token,"products",{name:f.name,category:f.category,season:f.season,factory_id:f.factoryId,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,bom:f.bom,user_id:user.id});setProducts(p=>[...p,Array.isArray(r)?{...r[0],factoryId:r[0].factory_id||"",factoryTel:r[0].factory_tel||"",colors:r[0].colors||[],bom:r[0].bom||[]}:{...f,id:uid()}]);}else{setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]);}}catch{setProducts(f.id?products.map(p=>p.id===f.id?f:p):[...products,{...f,id:uid()}]);}
+    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
+    try{
+      if(f.id&&user?.token){await DB.update(user.token,"products",f.id,sd);setProducts(products.map(p=>p.id===f.id?{...f}:p));}
+      else if(user?.token){const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});setProducts(p=>[...p,Array.isArray(r)?{...r[0],factoryId:r[0].factory_id||"",factoryTel:r[0].factory_tel||"",colors:r[0].colors||[],colorBom:r[0].color_bom||{}}:{...f,id:uid()}]);}
+      else{setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);}
+    }catch{setProducts(f.id?products.map(p=>p.id===f.id?{...f}:p):[...products,{...f,id:uid()}]);}
     setSheet(false);
   }
+
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"products",id);}catch{}setProducts(products.filter(p=>p.id!==id));}
+
+  const curBom=f.colorBom[selColor]||[];
+
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>상품 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
@@ -296,27 +324,66 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
       {filtered.length===0?<Empty icon="👕" text="등록된 상품이 없습니다"/>:filtered.map(p=>(
         <Card key={p.id} st={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{flex:1}}><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div><div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{(p.colors||[]).map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 8px",fontSize:11,color:C.sub2,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div><div style={{color:C.sub,fontSize:11}}>{p.factory&&`📍 ${p.factory}`}{p.bom?.length>0&&` · BOM ${p.bom.length}종`}</div></div>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{(p.colors||[]).map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 8px",fontSize:11,color:C.sub2,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div>
+              <div style={{color:C.sub,fontSize:11}}>
+                {p.factory&&`📍 ${p.factory}`}
+                {p.colorBom&&Object.values(p.colorBom).some(b=>b.length>0)&&` · BOM 등록됨`}
+                {!p.colorBom&&(p.bom?.length>0)&&` · BOM ${p.bom.length}종 (구버전)`}
+              </div>
+            </div>
             <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(p)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(p.id)}/></div>
           </div>
         </Card>
       ))}
-      {sheet&&<Sheet title={f.id?"상품 수정":"1단계 원단 입력"} onClose={()=>setSheet(false)}>
-        <StepBar cur={0}/>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>기본 정보</div>
-        <FCard><FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow><FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow><FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow></FCard>
-        {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>발주 색상 목록 <span style={{fontSize:11,fontWeight:400}}>(발주 시 선택용)</span></div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:10,padding:"10px 12px",alignItems:"center"}}>{f.colors.map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"3px 9px",fontSize:12,display:"flex",alignItems:"center",gap:4,border:`1px solid ${C.bdr}`}}>{c}<button onClick={()=>setF(p=>({...p,colors:p.colors.filter(x=>x!==c)}))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:11,padding:0,lineHeight:1}}>✕</button></span>)}<div style={{display:"flex",gap:4}}><input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상 추가" style={{width:70,border:`1px solid ${C.bdr}`,borderRadius:6,padding:"3px 8px",fontSize:12,fontFamily:C.fn,outline:"none",color:C.txt}}/><button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:6,padding:"3px 10px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:C.fn}}>+</button></div></div>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>업체 정보</div>
-        <FCard mb={12}><FRow label="업체명" last><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>v.name?.includes(venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow></FCard>
-        <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>원단 정보</div>
-        <FCard><FRow label="원단명"><FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/></FRow><FRow label="원단 색상"><FInp val={br.color} onChange={v=>setBr(r=>({...r,color:v}))} ph="예: 블랙, 베이지"/></FRow><FRow label="소요량"><FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>yd</span></FRow><FRow label="단가" last><FInp val={br.price||""} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>원</span></FRow></FCard>
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>{MAT_TYPES.map(t=>{const act=br.type===t;return<button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div>
-        {f.bom.length>0&&f.bom.map(b=>{const ven=vendors.find(v=>v.id===b.vid);const isE=editBomId===b.id;return<div key={b.id} style={{background:isE?C.acc+"10":C.bg,borderRadius:8,padding:"9px 12px",marginBottom:6,border:`1.5px solid ${isE?C.acc:C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{flex:1,minWidth:0}}><span style={{background:C.acc+"15",color:C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,marginRight:6}}>{b.type||"원단"}</span><span style={{fontWeight:700,fontSize:12}}>{b.mat}</span>{b.color&&<span style={{background:C.sub+"18",color:C.sub2,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:600,marginLeft:5}}>{b.color}</span>}<span style={{color:C.sub,fontSize:11,marginLeft:6}}>{b.amt}yd</span>{ven&&<span style={{color:C.sub,fontSize:11,marginLeft:4}}>· {ven.name}</span>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>{if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",color:""});setVenSearch("");}else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||"",color:b.color||""});const ev=vendors.find(v=>v.id===b.vid);setVenSearch(ev?.name||"");}}} style={{background:"none",border:"none",color:isE?C.acc:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:C.fn}}>{isE?"취소":"수정"}</button><button onClick={()=>{setF(p=>({...p,bom:p.bom.filter(x=>x.id!==b.id)}));if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",color:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div></div></div>;})}
-        <Btn ch={editBomId?"✓ 수정 완료":"+ 원부자재 추가"} v={editBomId?"p":"w"} full st={{marginBottom:18}} onClick={addBom}/>
-        <div style={{display:"flex",gap:10}}><Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={save} disabled={!f.name}/></div>
+      {sheet&&<Sheet title={f.id?"상품 수정":"상품 등록"} onClose={()=>setSheet(false)}>
+        <StepBar cur={sheetStep} total={2}/>
+        {sheetStep===0&&<>
+          <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>기본 정보</div>
+          <FCard>
+            <FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow>
+            <FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
+            <FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
+          </FCard>
+          {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:12,fontWeight:700,color:C.txt}}>발주 색상 목록</span>
+            <span style={{fontSize:11,color:C.warn}}>* 1개 이상 필수</span>
+          </div>
+          <div style={{background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:10,padding:"12px",marginBottom:20}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:7,minHeight:36,marginBottom:f.colors.length>0?10:0}}>
+              {f.colors.map(c=><span key={c} style={{background:C.acc+"12",border:`1.5px solid ${C.acc}`,color:C.acc,borderRadius:20,padding:"5px 12px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>{c}<button onClick={()=>removeColor(c)} style={{background:"none",border:"none",color:C.acc,cursor:"pointer",fontSize:13,padding:0,lineHeight:1}}>✕</button></span>)}
+              {f.colors.length===0&&<span style={{color:C.sub,fontSize:12,alignSelf:"center"}}>아직 색상 없음</span>}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상명 입력 (예: 블랙, 네이비)" style={{flex:1,border:`1px solid ${C.bdr}`,borderRadius:8,padding:"9px 12px",fontSize:13,fontFamily:C.fn,outline:"none",color:C.txt}}/>
+              <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:C.fn,flexShrink:0}}>+ 추가</button>
+            </div>
+          </div>
+          <Btn ch="다음 : 원부자재 등록 →" full onClick={goToStep1} disabled={!f.name||f.colors.length===0} st={{borderRadius:10,height:50,fontSize:14}}/>
+        </>}
+        {sheetStep===1&&<>
+          <div style={{fontSize:12,color:C.sub,marginBottom:12}}>색상 탭을 선택하고 원부자재를 등록하세요</div>
+          <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
+            {f.colors.map(c=>{const cnt=(f.colorBom[c]||[]).length;const act=selColor===c;return<button key={c} onClick={()=>{setSelColor(c);setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");}} style={{padding:"8px 16px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`2px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6}}>{c}{cnt>0&&<span style={{background:act?"rgba(255,255,255,0.25)":"#EEF2FF",color:act?"#fff":C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{cnt}</span>}</button>;})}</div>
+          {selColor?<>
+            {curBom.length>0&&<div style={{marginBottom:10}}>{curBom.map(b=>{const ven=vendors.find(v=>v.id===b.vid);const isE=editBomId===b.id;return<div key={b.id} style={{background:isE?C.acc+"10":"#F8F9FB",borderRadius:8,padding:"9px 12px",marginBottom:6,border:`1.5px solid ${isE?C.acc:C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{flex:1,minWidth:0}}><span style={{background:C.acc+"15",color:C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,marginRight:6}}>{b.type||"원단"}</span><span style={{fontWeight:700,fontSize:12}}>{b.mat}</span><span style={{color:C.sub,fontSize:11,marginLeft:6}}>{b.amt}yd</span>{ven&&<span style={{color:C.sub,fontSize:11,marginLeft:4}}>· {ven.name}</span>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>{if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");}else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||"",price:String(b.price||"")});const ev=vendors.find(v=>v.id===b.vid);setVenSearch(ev?.name||"");}}} style={{background:"none",border:"none",color:isE?C.acc:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:C.fn}}>{isE?"취소":"수정"}</button><button onClick={()=>{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).filter(x=>x.id!==b.id)}}));if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div></div></div>;})}</div>}
+            <div style={{background:"#F0F4FF",borderRadius:12,padding:"14px",marginBottom:12,border:`1px dashed ${C.acc}60`}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.acc,marginBottom:10}}>✏️ [{selColor}] 원부자재 {editBomId?"수정":"추가"}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{MAT_TYPES.map(t=>{const act=br.type===t;return<button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div>
+              <FCard mb={8}>
+                <FRow label="업체명"><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>v.name?.includes(venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow>
+                <FRow label="원단명" req><FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph="예: 30수 면 싱글"/></FRow>
+                <FRow label="소요량" req><FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0.0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>yd</span></FRow>
+                <FRow label="단가" last><FInp val={br.price||""} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>원</span></FRow>
+              </FCard>
+              <Btn ch={editBomId?"✓ 수정 완료":"+ 추가"} full onClick={addBom} disabled={!br.mat||!br.amt}/>
+            </div>
+          </>:<div style={{textAlign:"center",padding:"24px 0",color:C.sub,fontSize:13}}>위에서 색상 탭을 선택하세요 👆</div>}
+          <div style={{display:"flex",gap:10,marginTop:4}}><Btn ch="← 이전" v="w" full st={{flex:1}} onClick={()=>setSheetStep(0)}/><Btn ch="저장 완료" full st={{flex:2}} onClick={save} disabled={!f.name}/></div>
+        </>}
       </Sheet>}
     </div>
   );
@@ -418,7 +485,7 @@ export default function App(){
       }
       setVendors(Array.isArray(v)?v:[]);
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||""})):[]);
-      setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],bom:x.bom||[]})):[]);
+      setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[]})):[]);
       setOrders(Array.isArray(o)?o:[]);
     }catch(e){
       try{localStorage.removeItem("dworks_session");}catch{}
