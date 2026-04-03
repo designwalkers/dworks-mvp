@@ -216,7 +216,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
         
         if(r.error || r.code || !Array.isArray(r) || r.length === 0) { 
-          alert(`[발주 저장 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message || '세션 만료 또는 권한 없음'}`); 
+          alert(`[발주 저장 실패] DB 에러입니다.\n사유: ${r.message}`); 
           setSending(false); 
           return; 
         }
@@ -520,25 +520,50 @@ function ListPage({orders,setOrders,products,user}){
 
 function VendorPage({vendors,setVendors,user}){
   const [sheet,setSheet]=useState(false);
-  const [f,setF]=useState({name:"",tel:"",email:"",type:"원단"});
+  // 상태 변수에 subTel(선택 전화번호), address(주소), bizNo(사업자번호) 추가
+  const [f,setF]=useState({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:""});
   const [editId,setEditId]=useState(null);
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
-  function openAdd(){setF({name:"",tel:"",email:"",type:"원단"});setEditId(null);setSheet(true);}
+
+  function openAdd(){setF({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:""});setEditId(null);setSheet(true);}
   function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
+
   async function save(){
-    if(!f.name)return;
+    // 필수값 유효성 검사
+    if(!f.name || !f.tel || !f.address){
+      alert("거래처명, 핸드폰번호, 거래처 주소는 필수 입력 항목입니다.");
+      return;
+    }
+
+    const dataToSave = {
+      name: f.name,
+      tel: f.tel, // 핸드폰번호
+      sub_tel: f.subTel || null, // 전화번호(선택)
+      email: f.email,
+      type: f.type,
+      address: f.address, // 주소(필수)
+      biz_no: f.bizNo || null // 사업자등록번호(선택)
+    };
+
     try{
       if(editId){
         if(user?.token){
-          const r=await DB.update(user.token,"vendors",editId,{name:f.name,tel:f.tel,email:f.email,type:f.type});
-          if(r.error||r.code){alert(`[거래처 수정 실패] ${r.message||''}`);return;}
+          const r=await DB.update(user.token,"vendors",editId,dataToSave);
+          if(r.error||r.code){
+            alert(`[거래처 수정 실패] Supabase 'vendors' 테이블에 sub_tel, address, biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
+            return;
+          }
         }
         setVendors(vv=>vv.map(v=>v.id===editId?{...v,...f}:v));
       }else{
         if(user?.token){
-          const r=await DB.insert(user.token,"vendors",{name:f.name,tel:f.tel,email:f.email,type:f.type,user_id:user.id});
-          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[거래처 추가 실패] 다시 로그인해주세요.`);return;}
-          setVendors(vv=>[...vv, r[0]]);
+          const r=await DB.insert(user.token,"vendors",{...dataToSave,user_id:user.id});
+          if(r.error||r.code||!Array.isArray(r)||r.length===0){
+            alert(`[거래처 추가 실패] Supabase 'vendors' 테이블에 sub_tel, address, biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
+            return;
+          }
+          const nv = r[0];
+          setVendors(vv=>[...vv, {...nv, subTel:nv.sub_tel||"", address:nv.address||"", bizNo:nv.biz_no||""}]);
         }
       }
     }catch(e){
@@ -546,14 +571,20 @@ function VendorPage({vendors,setVendors,user}){
     }
     setSheet(false);
   }
+
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"vendors",id);}catch{}setVendors(vv=>vv.filter(x=>x.id!==id));}
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}><div style={{fontWeight:900,fontSize:20}}>거래처 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
-      {vendors.length===0?<Empty icon="🏭" text="등록된 거래처가 없습니다"/>:vendors.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:40,height:40,borderRadius:12,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{VEN_IC[v.type]||"🏭"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div><div style={{color:C.sub,fontSize:12}}>{v.tel||"연락처 없음"}</div><div style={{fontSize:11,color:v.email?C.sub:C.warn,marginTop:2}}>{v.email||"⚠️ 이메일 미등록"}</div></div><div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(v)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(v.id)}/></div></div></Card>)}
+      {vendors.length===0?<Empty icon="🏭" text="등록된 거래처가 없습니다"/>:vendors.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:40,height:40,borderRadius:12,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{VEN_IC[v.type]||"🏭"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div><div style={{color:C.sub,fontSize:12}}>📱 {v.tel||"핸드폰 미등록"}{v.subTel ? ` · ☎️ ${v.subTel}` : ""}</div>{v.address&&<div style={{fontSize:11,color:C.sub2,marginTop:2}}>📍 {v.address}</div>}{v.bizNo&&<div style={{fontSize:11,color:C.sub,marginTop:2}}>🏢 {v.bizNo}</div>}<div style={{fontSize:11,color:v.email?C.sub:C.warn,marginTop:2}}>{v.email||"⚠️ 이메일 미등록"}</div></div><div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(v)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(v.id)}/></div></div></Card>)}
       {sheet&&<Sheet title={editId?"거래처 수정":"거래처 추가"} onClose={()=>setSheet(false)}>
         <Field label="거래처명" req><TxtInp val={f.name} onChange={sf("name")} ph="이레텍스"/></Field>
-        <Field label="전화번호"><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field>
+        {/* 핸드폰번호 (필수), 전화번호 (선택) */}
+        <Field label="핸드폰번호" req><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field>
+        <Field label="전화번호 (선택)"><TxtInp val={f.subTel} onChange={sf("subTel")} ph="02-000-0000" type="tel"/></Field>
+        {/* 주소 (필수), 사업자번호 (선택) */}
+        <Field label="거래처 주소" req><TxtInp val={f.address} onChange={sf("address")} ph="서울시 종로구 ..." /></Field>
+        <Field label="사업자 등록번호"><TxtInp val={f.bizNo} onChange={sf("bizNo")} ph="000-00-00000" /></Field>
         <Field label="이메일 (발주서 발송용)"><TxtInp val={f.email} onChange={sf("email")} ph="order@fabric.com" type="email"/></Field>
         <Field label="업체 유형"><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VEN_TYPES.map(t=>{const act=f.type===t;return<button key={t} onClick={()=>sf("type")(t)} style={{padding:"7px 13px",borderRadius:20,border:`1.5px solid ${act?(VEN_C[t]||C.acc):C.bdr}`,background:act?(VEN_C[t]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:4}}>{VEN_IC[t]} {t}</button>;})}</div></Field>
         <G/><div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={save}/></div>
@@ -637,7 +668,8 @@ export default function App(){
         try{localStorage.removeItem("dworks_session");}catch{}
         setUser(null);setScreen("auth");setLoading(false);return;
       }
-      setVendors(Array.isArray(v)?v:[]);
+      // DB에서 데이터를 가져올 때 카멜케이스(subTel, bizNo 등)로 매핑하여 저장
+      setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[]})):[]);
       setOrders(Array.isArray(o)?o:[]);
