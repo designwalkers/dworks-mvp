@@ -194,21 +194,60 @@ function OrderPage({products,orders,setOrders,vendors,user}){
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("임시저장된 발주를 불러왔습니다!");}}}catch{};},[]);
   const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
-  async function submit(){if(!items.length){alert("발주 항목 추가");return;}const o={items,status:"진행중",date:today(),ts:new Date().toISOString()};try{if(user?.token){const r=await DB.insert(user.token,"orders",{...o,user_id:user.id});setOrders(p=>[...p,Array.isArray(r)?r[0]:{...o,id:uid()}]);}else setOrders(p=>[...p,{...o,id:uid()}]);}catch{setOrders(p=>[...p,{...o,id:uid()}]);}try{localStorage.removeItem(DRAFT);}catch{}setStep(3);}
+  async function submit(){
+    if(!items.length){alert("발주 항목 추가");return;}
+    const o={items,status:"진행중",date:today(),ts:new Date().toISOString()};
+    try{if(user?.token){const r=await DB.insert(user.token,"orders",{...o,user_id:user.id});setOrders(p=>[...p,Array.isArray(r)?r[0]:{...o,id:uid()}]);}else setOrders(p=>[...p,{...o,id:uid()}]);}catch{setOrders(p=>[...p,{...o,id:uid()}]);}
+    try{localStorage.removeItem(DRAFT);}catch{}
+    // 이메일 자동 발송
+    await sendMail();
+    setStep(3);
+  }
   async function sendMail(){
+    // 거래처별로 발주서 묶기
     const venMap={};
-    for(const it of items){const prod=products.find(x=>x.id===it.pid);if(!prod)continue;for(const b of(prod.bom||[])){const ven=vendors.find(v=>v.id===b.vid);if(!ven)continue;const soyo=Math.round(b.amt*it.qty*100)/100;if(!venMap[ven.id])venMap[ven.id]={vendor:ven,entries:[]};venMap[ven.id].entries.push({prod,b,color:it.color,soyo});}}
+    for(const it of items){
+      const prod=products.find(x=>x.id===it.pid);
+      if(!prod)continue;
+      for(const b of(prod.bom||[])){
+        const ven=vendors.find(v=>v.id===b.vid);
+        if(!ven)continue;
+        const soyo=Math.round(b.amt*it.qty*100)/100;
+        if(!venMap[ven.id])venMap[ven.id]={vendor:ven,lines:[],prod};
+        venMap[ven.id].lines.push({mat:b.mat,color:it.color,soyo,unit:b.unit||"yd",prod});
+      }
+    }
     const targets=Object.values(venMap).filter(v=>v.vendor.email);
-    if(!targets.length){alert("발송 가능한 이메일이 없습니다.\n거래처 관리에서 이메일을 등록해주세요.");return;}
+    if(!targets.length){return;}
     setSending(true);let cnt=0;
-    for(const{vendor,entries}of targets){
-      const matMap={};for(const e of entries){const key=e.b.mat;if(!matMap[key])matMap[key]={mat:e.b.mat,unit:e.b.unit||"yd",colors:[],prod:e.prod};matMap[key].colors.push(`${e.color} ${fmtN(e.soyo)}${e.b.unit||"yd"}`);}
-      let body=`안녕하세요\n\n`;
-      for(const m of Object.values(matMap)){body+=`[${m.prod.name}]\n${m.mat}\n`;m.colors.forEach(c=>{body+=`${c}\n`;});body+=`\n품목 : ${m.prod.name}\n------------------------\n입고처 : ${m.prod.factory||"-"}\n연락처 : ${m.prod.factoryTel||"-"}\n\n`;}
-      body+=`감사합니다.\n---\nD-Works 발주 자동화 시스템`;
+    for(const{vendor,lines,prod}of targets){
+      // 원하는 형식으로 본문 작성
+      const companyName = user?.company||"디자인워커스";
+      const factoryInfo = lines[0]?.prod;
+      let body = `${vendor.name} 담당자님 안녕하세요.\nD-Works 발주서 보내드립니다.\n\n`;
+      body += `업체명 : ${companyName}\n\n`;
+      // 원단별로 묶기
+      const matMap={};
+      for(const l of lines){
+        if(!matMap[l.mat])matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};
+        matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);
+      }
+      for(const m of Object.values(matMap)){
+        body+=`${m.mat}\n`;
+        m.colors.forEach(c=>{body+=`${c}\n`;});
+        body+=`\n`;
+      }
+      // 공장 정보
+      const p=lines[0]?.prod;
+      body+=`품목 : ${p?.name||"-"}\n\n`;
+      body+=`입고처 : ${p?.factory||"-"}\n`;
+      if(p?.factoryAddr) body+=`주소 : ${p.factoryAddr}\n`;
+      body+=`연락처 : ${p?.factoryTel||"-"}\n\n`;
+      body+=`감사합니다 문제 있으면 피드백 주세요\n\n---\nD-Works 발주 자동화 시스템`;
       if(await sendEmail(vendor.email,vendor.name,`[D-Works 발주서] ${today()} - ${vendor.name}`,body))cnt++;
     }
-    setSending(false);if(cnt>0)alert(`✅ ${cnt}곳 거래처에 발주서를 발송했습니다!`);else alert("발송 실패. 거래처 이메일을 확인해주세요.");
+    setSending(false);
+    if(cnt>0)console.log(`✅ ${cnt}곳 발주서 발송 완료`);
   }
   function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");}
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
@@ -238,8 +277,7 @@ function OrderPage({products,orders,setOrders,vendors,user}){
           {items.map((it,i)=>{const p=products.find(x=>x.id===it.pid);return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${C.bdr}`}}><div><div style={{fontWeight:700,fontSize:13}}>{p?.name}</div><div style={{color:C.sub,fontSize:11,marginTop:2}}>{it.color} · {p?.factory}</div></div><span style={{fontWeight:800,color:C.acc,fontSize:15}}>{fmtN(it.qty)}장</span></div>;})}
           <div style={{display:"flex",justifyContent:"space-between",paddingTop:10}}><span style={{fontWeight:700,fontSize:13}}>총 수량</span><span style={{fontWeight:900,color:C.acc,fontSize:17}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span></div>
         </Card>
-        <Btn ch={sending?"발송 중...":"📧 이메일 발송"} v="w" full st={{marginBottom:10}} onClick={sendMail} disabled={sending}/>
-        <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch="발주 완료" full st={{flex:2,background:C.ok}} onClick={submit}/></div>
+        <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch={sending?"발송 중...":"✅ 발주 완료"} full st={{flex:2,background:C.ok}} onClick={submit} disabled={sending}/></div>
       </>}
     </div>
   );
