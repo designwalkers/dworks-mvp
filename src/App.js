@@ -105,7 +105,6 @@ function SplashPage({onStart}){
 
 function AuthPage({onLogin}){
   const [tab,setTab]=useState("in");
-  // 폼 필드 확장: 업체명, 브랜드명, 이름, 직함, 연락처, 이메일, 비번, 비번확인, 주소, 약관동의
   const [f,setF]=useState({company:"",brand:"",name:"",position:"",tel:"",email:"",pw:"",pw2:"",address:"",agree:false});
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
@@ -113,7 +112,6 @@ function AuthPage({onLogin}){
 
   async function submit(){
     setErr("");
-    // 필수값 체크 로직 강화
     if(!f.email||!f.pw){setErr("이메일과 비밀번호를 입력하세요");return;}
     if(tab==="up"){
       if(!f.company){setErr("업체명을 입력하세요");return;}
@@ -128,7 +126,6 @@ function AuthPage({onLogin}){
     setLoading(true);
     try{
       if(tab==="up"){
-        // 회원가입 시 메타데이터에 모든 정보 저장
         const r=await DB.signUp(f.email,f.pw,{
           company:f.company,
           brand:f.brand,
@@ -409,13 +406,13 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     try{
       if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요!`);return;}
+        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
       else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요!`);
+          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);
           return;
         }
         const newProd = r[0];
@@ -583,13 +580,19 @@ function VendorPage({vendors,setVendors,user}){
       if(editId){
         if(user?.token){
           const r=await DB.update(user.token,"vendors",editId,dataToSave);
-          if(r.error||r.code){alert(`[거래처 수정 실패] DB 컬럼(sub_tel, address, biz_no) 추가 여부를 확인하세요.`);return;}
+          if(r.error||r.code){
+            alert(`[거래처 수정 실패] Supabase 'vendors' 테이블에 sub_tel, address, biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
+            return;
+          }
         }
         setVendors(vv=>vv.map(v=>v.id===editId?{...v,...f}:v));
       }else{
         if(user?.token){
           const r=await DB.insert(user.token,"vendors",{...dataToSave,user_id:user.id});
-          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[거래처 추가 실패] DB 컬럼 추가 여부를 확인하세요.`);return;}
+          if(r.error||r.code||!Array.isArray(r)||r.length===0){
+            alert(`[거래처 추가 실패] Supabase 'vendors' 테이블에 sub_tel, address, biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`);
+            return;
+          }
           const nv = r[0];
           setVendors(vv=>[...vv, {...nv, subTel:nv.sub_tel||"", address:nv.address||"", bizNo:nv.biz_no||""}]);
         }
@@ -624,21 +627,23 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [profileSheet,setProfileSheet]=useState(false);
   const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||""});
   async function saveProfile(){try{if(user?.token)await DB.updateUser(user.token,{name:pf.name,company:pf.company,tel:pf.tel});}catch{}if(setUser)setUser(u=>({...u,...pf}));setProfileSheet(false);alert("저장되었습니다!");}
-  async function saveFac(){
+  
+  // 수정된 부분: 공장 저장 로직에 사업자 등록번호(bizNo) 추가
+  async function saveFac(){
     if(!facSheet.name)return;
     const{id,...data}=facSheet;
     try{
       if(id){
         if(user?.token){
-          const r=await DB.update(user.token,"factories",id,{...data,biz_type:data.bizType});
-          if(r.error||r.code){alert(`[공장 수정 실패] ${r.message}`); return;}
+          const r=await DB.update(user.token,"factories",id,{...data,biz_type:data.bizType, biz_no:data.bizNo||null});
+          if(r.error||r.code){alert(`[공장 수정 실패] Supabase factories 테이블에 biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`); return;}
         }
         setFactories(ff=>ff.map(x=>x.id===id?{...x,...data}:x));
       }else{
         if(user?.token){
-          const r=await DB.insert(user.token,"factories",{name:data.name,biz_type:data.bizType,address:data.address,tel:data.tel,account:data.account,user_id:user.id});
-          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[공장 추가 실패] 다시 로그인해주세요.`); return;}
-          setFactories(ff=>[...ff,{...r[0],bizType:r[0].biz_type||""}]);
+          const r=await DB.insert(user.token,"factories",{name:data.name,biz_type:data.bizType,address:data.address,tel:data.tel,account:data.account,biz_no:data.bizNo||null,user_id:user.id});
+          if(r.error||r.code||!Array.isArray(r)||r.length===0){alert(`[공장 추가 실패] Supabase factories 테이블에 biz_no 컬럼이 없거나 권한이 없습니다.\n(${r.message||''})`); return;}
+          setFactories(ff=>[...ff,{...r[0],bizType:r[0].biz_type||"", bizNo:r[0].biz_no||""}]);
         }
       }
     }catch(e){
@@ -655,11 +660,12 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
         <Divider/><Btn ch="로그아웃" v="w" full st={{color:C.red}} onClick={onLogout}/>
       </Card>
       <Card>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:700,fontSize:14}}>🏭 공장 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>setFacSheet({id:null,name:"",bizType:"",address:"",tel:"",account:""})}/></div>
-        {factories.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.sub,fontSize:12}}>등록된 공장이 없습니다</div>:factories.map(fc=><div key={fc.id} style={{padding:"10px 0",borderBottom:`1px solid ${C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:700,fontSize:13}}>{fc.name}</span>{(fc.bizType||fc.biz_type)&&<Tag ch={fc.bizType||fc.biz_type} c={C.acc}/>}</div>{fc.address&&<div style={{color:C.sub,fontSize:11,marginBottom:1}}>📍 {fc.address}</div>}<div style={{color:C.sub,fontSize:11}}>{fc.tel||"연락처 없음"}</div>{fc.account&&<div style={{color:C.sub,fontSize:10,marginTop:2}}>🏦 {fc.account}</div>}</div><div style={{display:"flex",gap:5,flexShrink:0,marginLeft:8}}><Btn ch="수정" v="w" sz="s" st={{padding:"4px 10px",fontSize:11}} onClick={()=>setFacSheet({...fc,bizType:fc.bizType||fc.biz_type||""})}/><Btn ch="삭제" v="w" sz="s" st={{padding:"4px 10px",fontSize:11,color:C.red}} onClick={()=>delFac(fc.id)}/></div></div></div>)}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:700,fontSize:14}}>🏭 공장 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>setFacSheet({id:null,name:"",bizType:"",address:"",tel:"",account:"",bizNo:""})}/></div>
+        {factories.length===0?<div style={{textAlign:"center",padding:"12px 0",color:C.sub,fontSize:12}}>등록된 공장이 없습니다</div>:factories.map(fc=><div key={fc.id} style={{padding:"10px 0",borderBottom:`1px solid ${C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:700,fontSize:13}}>{fc.name}</span>{(fc.bizType||fc.biz_type)&&<Tag ch={fc.bizType||fc.biz_type} c={C.acc}/>}</div>{fc.address&&<div style={{color:C.sub,fontSize:11,marginBottom:1}}>📍 {fc.address}</div>}<div style={{color:C.sub,fontSize:11}}>📞 {fc.tel||"연락처 없음"}</div>{fc.bizNo&&<div style={{color:C.sub,fontSize:11,marginTop:2}}>🏢 {fc.bizNo}</div>}{fc.account&&<div style={{color:C.sub,fontSize:10,marginTop:2}}>🏦 {fc.account}</div>}</div><div style={{display:"flex",gap:5,flexShrink:0,marginLeft:8}}><Btn ch="수정" v="w" sz="s" st={{padding:"4px 10px",fontSize:11}} onClick={()=>setFacSheet({...fc,bizType:fc.bizType||fc.biz_type||"",bizNo:fc.bizNo||fc.biz_no||""})}/><Btn ch="삭제" v="w" sz="s" st={{padding:"4px 10px",fontSize:11,color:C.red}} onClick={()=>delFac(fc.id)}/></div></div></div>)}
       </Card>
       {facSheet!==null&&<Sheet title={facSheet.id?"공장 수정":"공장 추가"} onClose={()=>setFacSheet(null)}>
         <Field label="공장명" req><TxtInp val={facSheet.name||""} onChange={v=>setFacSheet(p=>({...p,name:v}))} ph="예: OO봉제"/></Field>
+        <Field label="사업자 등록번호"><TxtInp val={facSheet.bizNo||""} onChange={v=>setFacSheet(p=>({...p,bizNo:v}))} ph="000-00-00000"/></Field>
         <Field label="업종"><DropSel val={facSheet.bizType||""} onChange={v=>setFacSheet(p=>({...p,bizType:v}))} ph="업종 선택">{BIZ_TYPES.map(t=><option key={t} value={t}>{t}</option>)}</DropSel></Field>
         <Field label="주소"><TxtInp val={facSheet.address||""} onChange={v=>setFacSheet(p=>({...p,address:v}))} ph="서울시 중구 OO동"/></Field>
         <Field label="연락처"><TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="02-0000-0000" type="tel"/></Field>
@@ -695,7 +701,8 @@ export default function App(){
         setUser(null);setScreen("auth");setLoading(false);return;
       }
       setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
-      setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||""})):[]);
+      // 수정된 부분: factories 데이터를 가져올 때 biz_no도 프론트엔드 형식에 맞게 매핑
+      setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[]})):[]);
       setOrders(Array.isArray(o)?o:[]);
     }catch(e){
