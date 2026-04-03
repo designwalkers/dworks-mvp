@@ -193,14 +193,41 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("임시저장된 발주를 불러왔습니다!");}}}catch{};},[]);
   const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
-  async function submit(){
+  
+  async function submit(){
     if(!items.length){alert("발주 항목 추가");return;}
-    const o={items,memo,status:"진행중",date:today(),ts:new Date().toISOString()};
-    try{if(user?.token){const r=await DB.insert(user.token,"orders",{...o,user_id:user.id});setOrders(p=>[...p,Array.isArray(r)?r[0]:{...o,id:uid()}]);}else setOrders(p=>[...p,{...o,id:uid()}]);}catch{setOrders(p=>[...p,{...o,id:uid()}]);}
+    setSending(true);
+
+    const groupedByPid = items.reduce((acc, it) => {
+      if(!acc[it.pid]) acc[it.pid] = [];
+      acc[it.pid].push(it);
+      return acc;
+    }, {});
+
+    const ts = new Date().toISOString();
+    const d = today();
+    const newOrders = [];
+
+    for(const [pid, groupItems] of Object.entries(groupedByPid)){
+      const o = { items: groupItems, memo, status: "진행중", date: d, ts };
+      try{
+        if(user?.token){
+          const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
+          newOrders.push(Array.isArray(r) ? r[0] : {...o, id: uid()});
+        }else{
+          newOrders.push({...o, id: uid()});
+        }
+      }catch{
+        newOrders.push({...o, id: uid()});
+      }
+    }
+
+    setOrders(p => [...newOrders, ...p]);
     try{localStorage.removeItem(DRAFT);}catch{}
     await sendMail();
     setStep(3);
   }
+
   async function sendMail(){
     const venMap={};
     for(const it of items){
@@ -211,32 +238,54 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         const ven=vendors.find(v=>v.id===b.vid);
         if(!ven)continue;
         const soyo=Math.round(b.amt*it.qty*100)/100;
-        if(!venMap[ven.id])venMap[ven.id]={vendor:ven,lines:[],prod};
+        if(!venMap[ven.id])venMap[ven.id]={vendor:ven,lines:[]};
+        // 발송 내역에 상품 정보(prod)도 같이 포함하여 나중에 품목별로 묶을 수 있게 함
         venMap[ven.id].lines.push({mat:b.mat,color:b.color||it.color,soyo,unit:b.unit||"yd",prod});
       }
     }
     const targets=Object.values(venMap).filter(v=>v.vendor.email);
-    if(!targets.length)return;
-    setSending(true);let cnt=0;
-    for(const{vendor,lines,prod}of targets){
+    if(!targets.length) { setSending(false); return; }
+    let cnt=0;
+    for(const{vendor,lines}of targets){
       const companyName=user?.company||"디자인워커스";
+      // 1. 거래처 담당자에게 보내는 인사말 추가
+      let body=`${vendor.name} 담당자님 안녕하세요.\n\n업체명 : ${companyName}\n\n`;
+      
+      // 2. 발주 품목별로 원부자재 그룹화
+      const prodMap={};
+      for(const l of lines){
+        const pName=l.prod?.name||"-";
+        if(!prodMap[pName])prodMap[pName]={matMap:{}};
+        if(!prodMap[pName].matMap[l.mat])prodMap[pName].matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};
+        prodMap[pName].matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);
+      }
+
+      // 3. 그룹화된 데이터 출력 포맷 맞추기
+      for(const[pName,pData]of Object.entries(prodMap)){
+        for(const m of Object.values(pData.matMap)){
+          body+=`${m.mat}\n`;
+          m.colors.forEach(c=>{body+=`${c}\n`;});
+          body+=`\n`;
+        }
+        body+=`품목 : ${pName}\n\n`;
+      }
+      
+      // 입고처 정보 (가장 첫 번째 아이템의 공장 정보 기준)
       const p=lines[0]?.prod;
-      let body=`업체명 : ${companyName}\n\n`;
-      const matMap={};
-      for(const l of lines){if(!matMap[l.mat])matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);}
-      for(const m of Object.values(matMap)){body+=`${m.mat}\n`;m.colors.forEach(c=>{body+=`${c}\n`;});body+=`\n`;}
-      body+=`품목 : ${p?.name||"-"}\n\n`;
       body+=`입고처 : ${p?.factory||"-"}\n`;
       const factoryObj=factories?.find(f=>f.name===p?.factory);
       body+=`주소 : ${factoryObj?.address||"-"}\n`;
       body+=`연락처 : ${p?.factoryTel||"-"}\n\n`;
+      
       if(memo)body+=`[요청 및 전달사항]\n${memo}\n\n`;
-      body+=`감사합니다 문제 있으면 피드백 주세요.`;
+      body+=`감사합니다 문제 있으면 피드백 주세요.\nD-Works`;
+
       if(await sendEmail(vendor.email,vendor.name,`[D-Works 발주서] ${today()} - ${vendor.name}`,body))cnt++;
     }
     setSending(false);
     if(cnt>0)console.log(`✅ ${cnt}곳 발주서 발송 완료`);
   }
+
   function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");}
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
   return(
@@ -405,7 +454,7 @@ function ListPage({orders,setOrders,products,user}){
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>발주 리스트</div><Tag ch={`${orders.length}건`} c={C.sub}/></div>
       <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{["전체","진행중","완료","지연"].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{s}</button>)}</div>
-      {filtered.length===0?<Empty icon="📋" text="발주 내역이 없습니다"/>:filtered.map(o=>{const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);const isO=open===o.id;return<Card key={o.id} st={{marginBottom:10,cursor:"pointer"}} onClick={()=>setOpen(isO?null:o.id)}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:13,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-").join(", ")}</div><div style={{color:C.sub,fontSize:11}}>{o.date} · {fmtN(tot)}장</div></div><div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,marginLeft:8}}><Tag ch={o.status} c={SC[o.status]||C.sub}/><span style={{color:C.sub,fontSize:12}}>{isO?"▲":"▼"}</span></div></div>{isO&&<div onClick={e=>e.stopPropagation()}><Divider/>{(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.bdr}`,fontSize:12}}><span style={{fontWeight:600}}>{p?.name}</span><span>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}<div style={{display:"flex",gap:7,marginTop:10,flexWrap:"wrap"}}>{["진행중","완료","지연"].map(st=><Btn key={st} ch={st} sz="s" st={{padding:"5px 11px",background:o.status===st?(SC[st]||C.acc):"#fff",color:o.status===st?"#fff":(SC[st]||C.sub2),border:`1.5px solid ${SC[st]||C.bdr}`,fontSize:12}} onClick={()=>changeStatus(o.id,st)}/>)}<Btn ch="삭제" sz="s" v="w" st={{marginLeft:"auto",color:C.red,fontSize:12,padding:"5px 11px"}} onClick={()=>delOrder(o.id)}/></div></div>}</Card>;})}
+      {filtered.length===0?<Empty icon="📋" text="발주 내역이 없습니다"/>:filtered.map(o=>{const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);const isO=open===o.id;return<Card key={o.id} st={{marginBottom:10,cursor:"pointer"}} onClick={()=>setOpen(isO?null:o.id)}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}><div style={{flex:1,minWidth:0}}><div style={{fontWeight:700,fontSize:13,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{Array.from(new Set((o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-"))).join(", ")}</div><div style={{color:C.sub,fontSize:11}}>{o.date} · {fmtN(tot)}장</div></div><div style={{display:"flex",gap:7,alignItems:"center",flexShrink:0,marginLeft:8}}><Tag ch={o.status} c={SC[o.status]||C.sub}/><span style={{color:C.sub,fontSize:12}}>{isO?"▲":"▼"}</span></div></div>{isO&&<div onClick={e=>e.stopPropagation()}><Divider/>{(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${C.bdr}`,fontSize:12}}><span style={{fontWeight:600}}>{p?.name}</span><span>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}<div style={{display:"flex",gap:7,marginTop:10,flexWrap:"wrap"}}>{["진행중","완료","지연"].map(st=><Btn key={st} ch={st} sz="s" st={{padding:"5px 11px",background:o.status===st?(SC[st]||C.acc):"#fff",color:o.status===st?"#fff":(SC[st]||C.sub2),border:`1.5px solid ${SC[st]||C.bdr}`,fontSize:12}} onClick={()=>changeStatus(o.id,st)}/>)}<Btn ch="삭제" sz="s" v="w" st={{marginLeft:"auto",color:C.red,fontSize:12,padding:"5px 11px"}} onClick={()=>delOrder(o.id)}/></div></div>}</Card>;})}
     </div>
   );
 }
