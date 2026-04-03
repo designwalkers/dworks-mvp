@@ -182,7 +182,7 @@ function DashPage({orders,products,onNav}){
   );
 }
 
-function OrderPage({products,orders,setOrders,vendors,user}){
+function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [step,setStep]=useState(1);
   const [items,setItems]=useState([]);
   const [search,setSearch]=useState("");
@@ -223,9 +223,9 @@ function OrderPage({products,orders,setOrders,vendors,user}){
     for(const{vendor,lines,prod}of targets){
       // 원하는 형식으로 본문 작성
       const companyName = user?.company||"디자인워커스";
-      const factoryInfo = lines[0]?.prod;
-      let body = `${vendor.name} 담당자님 안녕하세요.\nD-Works 발주서 보내드립니다.\n\n`;
-      body += `업체명 : ${companyName}\n\n`;
+      const p=lines[0]?.prod;
+      // EmailJS 템플릿에 인사말이 있으므로 본문에는 내용만
+      let body = `업체명 : ${companyName}\n\n`;
       // 원단별로 묶기
       const matMap={};
       for(const l of lines){
@@ -237,13 +237,13 @@ function OrderPage({products,orders,setOrders,vendors,user}){
         m.colors.forEach(c=>{body+=`${c}\n`;});
         body+=`\n`;
       }
-      // 공장 정보
-      const p=lines[0]?.prod;
       body+=`품목 : ${p?.name||"-"}\n\n`;
       body+=`입고처 : ${p?.factory||"-"}\n`;
-      if(p?.factoryAddr) body+=`주소 : ${p.factoryAddr}\n`;
+      // 공장 주소 추가 - factories 배열에서 찾기
+      const factoryObj = factories?.find(f=>f.name===p?.factory);
+      if(factoryObj?.address) body+=`주소 : ${factoryObj.address}\n`;
       body+=`연락처 : ${p?.factoryTel||"-"}\n\n`;
-      body+=`감사합니다 문제 있으면 피드백 주세요\n\n---\nD-Works 발주 자동화 시스템`;
+      body+=`감사합니다 문제 있으면 피드백 주세요.`;
       if(await sendEmail(vendor.email,vendor.name,`[D-Works 발주서] ${today()} - ${vendor.name}`,body))cnt++;
     }
     setSending(false);
@@ -477,7 +477,7 @@ export default function App(){
 
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
-    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} user={user}/>,
+    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
     list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user}/>,
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
