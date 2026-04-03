@@ -359,32 +359,43 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
   }
 
-  // 수정 핵심: DB 실패 시 화면을 가짜로 업데이트하지 않음
-  async function save(){
-    if(!f.name)return;
-    // 빈 글자("")가 DB 형식 충돌을 일으키지 않도록 null 처리
-    const sd={name:f.name,category:f.category,season:f.season,factory_id:f.factoryId||null,factory:f.factory,factory_tel:f.factoryTel,colors:f.colors,color_bom:f.colorBom};
-    try{
-      if(f.id&&user?.token){
+// 수정 핵심: DB 실패 시 화면을 가짜로 업데이트하지 않음 + DB 컬럼명 복구
+  async function save(){
+    if(!f.name)return;
+    
+    // 이 부분에서 color_bom을 다시 colorBom으로 되돌렸습니다!
+    const sd={
+      name:f.name,
+      category:f.category,
+      season:f.season,
+      factory_id:f.factoryId||null,
+      factory:f.factory,
+      factory_tel:f.factoryTel,
+      colors:f.colors,
+      colorBom:f.colorBom 
+    };
+
+    try{
+      if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
         if(r.error||r.code){alert(`[상품 수정 실패] ${r.message||'다시 로그인해주세요.'}`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
-      else if(user?.token){
+      else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
           alert(`[상품 등록 실패] 다시 로그인 해보시거나 관리자에게 문의하세요.\n사유: ${r.message||'권한 없음'}`);
           return;
         }
         const newProd = r[0];
-        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.colorBom||newProd.color_bom||{}}]);
       }
-    }catch(e){
+    }catch(e){
       alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
       return;
     }
-    setSheet(false);
-  }
+    setSheet(false);
+  }
 
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"products",id);}catch{}setProducts(products.filter(p=>p.id!==id));}
 
