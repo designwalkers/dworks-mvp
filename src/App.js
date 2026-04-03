@@ -254,15 +254,81 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [selColor,setSelColor]=useState("");
   const [qty,setQty]=useState("");
   const [sending,setSending]=useState(false);
+  
+  // 🚀 발주 미리보기 모달 상태 추가
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState([]);
+  
   const DRAFT="dworks_draft";
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("임시저장된 발주를 불러왔습니다!");}}}catch{};},[]);
   const filtered=products.filter(p=>p.name?.includes(search)||p.season?.includes(search));
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
   
-  async function submit(){
-    if(!items.length){alert("발주 항목 추가");return;}
+  // 🚀 발주 발송 전 이메일 본문 생성 (DB 저장 및 실제 발송은 하지 않음)
+  function generatePreview() {
+    if(!items.length){alert("발주 항목 추가");return;}
+    const venMap={};
+    for(const it of items){
+      const prod=products.find(x=>x.id===it.pid);
+      if(!prod)continue;
+      const bomList=prod.colorBom?.[it.color]||prod.bom||[];
+      for(const b of bomList){
+        const ven=vendors.find(v=>v.id===b.vid);
+        if(!ven)continue;
+        const soyo=Math.round(b.amt*it.qty*100)/100;
+        if(!venMap[ven.id])venMap[ven.id]={vendor:ven,lines:[]};
+        venMap[ven.id].lines.push({mat:b.mat,color:b.color||it.color,soyo,unit:b.unit||"yd",prod});
+      }
+    }
+    const targets=Object.values(venMap).filter(v=>v.vendor.email);
+    if(!targets.length) {
+      alert("발송할 거래처 이메일이 등록되어 있지 않습니다.\n거래처 관리에서 이메일을 확인해주세요.");
+      return;
+    }
+
+    const pData = [];
+    for(const{vendor,lines}of targets){
+      const companyName=user?.company||"디자인워커스";
+      let body=`${vendor.name} 담당자님 안녕하세요.\n\n업체명 : ${companyName}\n\n`;
+      
+      const prodMap={};
+      for(const l of lines){
+        const pName=l.prod?.name||"-";
+        if(!prodMap[pName])prodMap[pName]={matMap:{}};
+        if(!prodMap[pName].matMap[l.mat])prodMap[pName].matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};
+        prodMap[pName].matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);
+      }
+
+      for(const[pName,pDataObj]of Object.entries(prodMap)){
+        for(const m of Object.values(pDataObj.matMap)){
+          body+=`${m.mat}\n`;
+          m.colors.forEach(c=>{body+=`${c}\n`;});
+          body+=`\n`;
+        }
+        body+=`품목 : ${pName}\n\n`;
+      }
+      
+      const p=lines[0]?.prod;
+      body+=`입고처 : ${p?.factory||"-"}\n`;
+      const factoryObj=factories?.find(f=>f.name===p?.factory);
+      body+=`주소 : ${factoryObj?.address||"-"}\n`;
+      body+=`연락처 : ${p?.factoryTel||"-"}\n\n`;
+      
+      if(memo)body+=`[요청 및 전달사항]\n${memo}\n\n`;
+      body+=`감사합니다 문제 있으면 피드백 주세요.\nD-Works`;
+
+      pData.push({ vendor, body });
+    }
+    
+    setPreviewData(pData);
+    setShowPreview(true);
+  }
+
+  // 🚀 팝업에서 "최종 발송하기"를 누르면 실행 (DB 저장 및 실제 Email 발송)
+  async function confirmOrder() {
     setSending(true);
 
+    // 1. DB 저장 로직
     const groupedByPid = items.reduce((acc, it) => {
       if(!acc[it.pid]) acc[it.pid] = [];
       acc[it.pid].push(it);
@@ -277,9 +343,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       const o = { items: groupItems, status: "진행중", date: d, ts };
       try{
         if(!user?.token) { alert("로그인 정보가 없습니다. 다시 로그인해주세요."); setSending(false); return; }
-        
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
-        
         if(r.error || r.code || !Array.isArray(r) || r.length === 0) { 
           alert(`[발주 저장 실패] DB 에러입니다.\n사유: ${r.message}`); 
           setSending(false); 
@@ -292,67 +356,24 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         return;
       }
     }
-
     setOrders(p => [...newOrders, ...p]);
-    try{localStorage.removeItem(DRAFT);}catch{}
-    await sendMail();
-    setStep(3);
-  }
+    try{localStorage.removeItem(DRAFT);}catch{}
 
-  async function sendMail(){
-    const venMap={};
-    for(const it of items){
-      const prod=products.find(x=>x.id===it.pid);
-      if(!prod)continue;
-      const bomList=prod.colorBom?.[it.color]||prod.bom||[];
-      for(const b of bomList){
-        const ven=vendors.find(v=>v.id===b.vid);
-        if(!ven)continue;
-        const soyo=Math.round(b.amt*it.qty*100)/100;
-        if(!venMap[ven.id])venMap[ven.id]={vendor:ven,lines:[]};
-        venMap[ven.id].lines.push({mat:b.mat,color:b.color||it.color,soyo,unit:b.unit||"yd",prod});
-      }
-    }
-    const targets=Object.values(venMap).filter(v=>v.vendor.email);
-    if(!targets.length) { setSending(false); return; }
-    let cnt=0;
-    for(const{vendor,lines}of targets){
-      const companyName=user?.company||"디자인워커스";
-      let body=`${vendor.name} 담당자님 안녕하세요.\n\n업체명 : ${companyName}\n\n`;
-      
-      const prodMap={};
-      for(const l of lines){
-        const pName=l.prod?.name||"-";
-        if(!prodMap[pName])prodMap[pName]={matMap:{}};
-        if(!prodMap[pName].matMap[l.mat])prodMap[pName].matMap[l.mat]={mat:l.mat,unit:l.unit,colors:[]};
-        prodMap[pName].matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);
+    // 2. 이메일 실제 발송 로직 (미리 생성해둔 previewData 재활용)
+    let cnt=0;
+    for(const data of previewData){
+      if(await sendEmail(data.vendor.email, data.vendor.name, `[D-Works 발주서] ${today()} - ${data.vendor.name}`, data.body)) {
+        cnt++;
       }
+    }
 
-      for(const[pName,pData]of Object.entries(prodMap)){
-        for(const m of Object.values(pData.matMap)){
-          body+=`${m.mat}\n`;
-          m.colors.forEach(c=>{body+=`${c}\n`;});
-          body+=`\n`;
-        }
-        body+=`품목 : ${pName}\n\n`;
-      }
-      
-      const p=lines[0]?.prod;
-      body+=`입고처 : ${p?.factory||"-"}\n`;
-      const factoryObj=factories?.find(f=>f.name===p?.factory);
-      body+=`주소 : ${factoryObj?.address||"-"}\n`;
-      body+=`연락처 : ${p?.factoryTel||"-"}\n\n`;
-      
-      if(memo)body+=`[요청 및 전달사항]\n${memo}\n\n`;
-      body+=`감사합니다 문제 있으면 피드백 주세요.\nD-Works`;
+    setSending(false);
+    setShowPreview(false);
+    if(cnt>0)console.log(`✅ ${cnt}곳 발주서 발송 완료`);
+    setStep(3);
+  }
 
-      if(await sendEmail(vendor.email,vendor.name,`[D-Works 발주서] ${today()} - ${vendor.name}`,body))cnt++;
-    }
-    setSending(false);
-    if(cnt>0)console.log(`✅ ${cnt}곳 발주서 발송 완료`);
-  }
-
-  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");}
+  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setPreviewData([]);setShowPreview(false);}
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
   return(
     <div style={{padding:"14px 14px 80px"}}>
@@ -381,8 +402,204 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
           <div style={{display:"flex",justifyContent:"space-between",paddingTop:10}}><span style={{fontWeight:700,fontSize:13}}>총 수량</span><span style={{fontWeight:900,color:C.acc,fontSize:17}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span></div>
         </Card>
         <div style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:13,marginBottom:8,color:C.txt}}>📝 전달사항 (선택)</div><textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="예: 소량 발주건으로 10야드는 본사로, 나머지는 공장으로 배송 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"80px",boxSizing:"border-box"}}/></div>
-        <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch={sending?"발송 중...":"✅ 발주 완료"} full st={{flex:2,background:C.ok}} onClick={submit} disabled={sending}/></div>
+        
+        {/* 버튼 액션을 generatePreview로 변경 */}
+        <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch={"✅ 발주 미리보기"} full st={{flex:2,background:C.ok}} onClick={generatePreview} /></div>
       </>}
+
+      {/* 🚀 발주 최종 확인 (미리보기) 모달 */}
+      {showPreview && (
+        <Sheet title="발주 내용 최종 확인" onClose={() => setShowPreview(false)}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
+            아래 내용으로 총 <strong style={{color:C.txt}}>{previewData.length}곳</strong>의 거래처에 이메일 발주서가 발송됩니다.
+          </div>
+          
+          <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16, paddingRight: 4 }}>
+            {previewData.map((d, i) => (
+              <div key={i} style={{ marginBottom: 16, border: `1px solid ${C.bdr}`, borderRadius: 10, padding: 14, background: "#fff", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10, color: C.acc, borderBottom: `1px dashed ${C.bdr}`, paddingBottom: 8 }}>
+                  📧 받는 사람: {d.vendor.name} <span style={{fontWeight:500, color:C.sub}}>({d.vendor.email})</span>
+                </div>
+                <div style={{ fontSize: 12, whiteSpace: "pre-wrap", lineHeight: 1.6, color: C.txt }}>
+                  {d.body}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} />
+            <Btn ch={sending ? "발송 중..." : "🚀 최종 발송하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} />
+          </div>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+function ProdsPage({products,setProducts,vendors,factories,user}){
+  const [catF,setCatF]=useState("전체");
+  const [sheet,setSheet]=useState(false);
+  const [sheetStep,setSheetStep]=useState(0);
+  const [selColor,setSelColor]=useState("");
+  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});
+  const [ci,setCi]=useState("");
+  const [br,setBr]=useState({type:"",mat:"",amt:"",vid:"",price:"",color:""});
+  const [editBomId,setEditBomId]=useState(null);
+  const [venSearch,setVenSearch]=useState("");
+  const sf=k=>v=>setF(p=>({...p,[k]:v}));
+  const getUnit=t=>["단추","지퍼","기타"].includes(t)?"개":"yd";
+  const filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
+
+  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+
+  function copyProd(p){
+    setF({
+      ...p,
+      id: undefined, 
+      name: p.name + " (복사본)", 
+      colors: [...(p.colors||[])],
+      colorBom: JSON.parse(JSON.stringify(p.colorBom||{})) 
+    });
+    setCi("");
+    setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});
+    setVenSearch("");
+    setSheetStep(0);
+    setSelColor("");
+    setEditBomId(null);
+    setSheet(true);
+  }
+
+  function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c],colorBom:{...p.colorBom,[c]:p.colorBom[c]||[]}}));setCi("");}
+  function removeColor(c){setF(p=>{const nb={...p.colorBom};delete nb[c];return{...p,colors:p.colors.filter(x=>x!==c),colorBom:nb};});if(selColor===c)setSelColor("");}
+
+  function goToStep1(){
+    if(!f.name||f.colors.length===0){alert("상품명과 색상을 하나 이상 입력하세요");return;}
+    setF(p=>{const nb={...p.colorBom};p.colors.forEach(c=>{if(!nb[c])nb[c]=[];});return{...p,colorBom:nb};});
+    setSelColor(f.colors[0]);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setEditBomId(null);setSheetStep(1);
+  }
+
+  function addBom(){
+    if(!br.mat||!br.amt)return;
+    if(editBomId){setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt)}:b)}}));setEditBomId(null);}
+    else{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:[...(p.colorBom[selColor]||[]),{...br,id:uid(),amt:Number(br.amt),unit:getUnit(br.type)}]}}));}
+    setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
+  }
+
+  async function save(){
+    if(!f.name)return;
+    const sd={
+      name:f.name,
+      category:f.category,
+      season:f.season,
+      factory_id:f.factoryId||null,
+      factory:f.factory,
+      factory_tel:f.factoryTel,
+      colors:f.colors,
+      colorBom:f.colorBom 
+    };
+
+    try{
+      if(f.id&&user?.token){
+        const r=await DB.update(user.token,"products",f.id,sd);
+        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);return;}
+        setProducts(products.map(p=>p.id===f.id?{...f}:p));
+      }
+      else if(user?.token){
+        const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
+        if(r.error||r.code||!Array.isArray(r)||r.length===0){
+          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);
+          return;
+        }
+        const newProd = r[0];
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
+      }
+    }catch(e){
+      alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
+      return;
+    }
+    setSheet(false);
+  }
+
+  async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"products",id);}catch{}setProducts(products.filter(p=>p.id!==id));}
+
+  const curBom=f.colorBom[selColor]||[];
+
+  return(
+    <div style={{padding:"14px 14px 80px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>상품 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
+      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{["전체",...CATS].map(cat=>{const cnt=cat==="전체"?products.length:products.filter(p=>p.category===cat).length;const act=catF===cat;return<button key={cat} onClick={()=>setCatF(cat)} style={{padding:"6px 12px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat} {cnt}</button>;})}
+      </div>
+      {filtered.length===0?<Empty icon="👕" text="등록된 상품이 없습니다"/>:filtered.map(p=>(
+        <Card key={p.id} st={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{(p.colors||[]).map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 8px",fontSize:11,color:C.sub2,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div>
+              <div style={{color:C.sub,fontSize:11}}>
+                {p.factory&&`📍 ${p.factory}`}
+                {p.colorBom&&Object.values(p.colorBom).some(b=>b.length>0)&&` · BOM 등록됨`}
+                {!p.colorBom&&(p.bom?.length>0)&&` · BOM ${p.bom.length}종 (구버전)`}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
+              <Btn ch="복사" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.acc}} onClick={()=>copyProd(p)}/>
+              <Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(p)}/>
+              <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(p.id)}/>
+            </div>
+          </div>
+        </Card>
+      ))}
+      {sheet&&<Sheet title={f.id?"상품 수정":"상품 등록"} onClose={()=>setSheet(false)}>
+        <StepBar cur={sheetStep} total={2}/>
+        {sheetStep===0&&<>
+          <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>기본 정보</div>
+          <FCard>
+            <FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow>
+            <FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
+            <FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
+          </FCard>
+          {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <span style={{fontSize:12,fontWeight:700,color:C.txt}}>발주 색상 목록</span>
+            <span style={{fontSize:11,color:C.warn}}>* 1개 이상 필수</span>
+          </div>
+          <div style={{background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:10,padding:"12px",marginBottom:20}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:7,minHeight:36,marginBottom:f.colors.length>0?10:0}}>
+              {f.colors.map(c=><span key={c} style={{background:C.acc+"12",border:`1.5px solid ${C.acc}`,color:C.acc,borderRadius:20,padding:"5px 12px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>{c}<button onClick={()=>removeColor(c)} style={{background:"none",border:"none",color:C.acc,cursor:"pointer",fontSize:13,padding:0,lineHeight:1}}>✕</button></span>)}
+              {f.colors.length===0&&<span style={{color:C.sub,fontSize:12,alignSelf:"center"}}>아직 색상 없음</span>}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상명 입력 (예: 블랙, 네이비)" style={{flex:1,border:`1px solid ${C.bdr}`,borderRadius:8,padding:"9px 12px",fontSize:13,fontFamily:C.fn,outline:"none",color:C.txt}}/>
+              <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:C.fn,flexShrink:0}}>+ 추가</button>
+            </div>
+          </div>
+          <Btn ch="다음 : 원부자재 등록 →" full onClick={goToStep1} disabled={!f.name||f.colors.length===0} st={{borderRadius:10,height:50,fontSize:14}}/>
+        </>}
+        {sheetStep===1&&<>
+          <div style={{fontSize:12,color:C.sub,marginBottom:12}}>색상 탭을 선택하고 원부자재를 등록하세요</div>
+          <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
+            {f.colors.map(c=>{const cnt=(f.colorBom[c]||[]).length;const act=selColor===c;return<button key={c} onClick={()=>{setSelColor(c);setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}} style={{padding:"8px 16px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`2px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6}}>{c}{cnt>0&&<span style={{background:act?"rgba(255,255,255,0.25)":"#EEF2FF",color:act?"#fff":C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{cnt}</span>}</button>;})}</div>
+          {selColor?<>
+            {curBom.length>0&&<div style={{marginBottom:10}}>{curBom.map(b=>{const ven=vendors.find(v=>v.id===b.vid);const isE=editBomId===b.id;return<div key={b.id} style={{background:isE?C.acc+"10":"#F8F9FB",borderRadius:8,padding:"9px 12px",marginBottom:6,border:`1.5px solid ${isE?C.acc:C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{flex:1,minWidth:0}}><span style={{background:C.acc+"15",color:C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,marginRight:6}}>{b.type||"원단"}</span><span style={{fontWeight:700,fontSize:12}}>{b.mat}</span>{b.color&&<span style={{background:C.sub+"18",color:C.sub2,borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600,marginLeft:5}}>{b.color}</span>}<span style={{color:C.sub,fontSize:11,marginLeft:6}}>{b.amt}{b.unit||"yd"}</span>{ven&&<span style={{color:C.sub,fontSize:11,marginLeft:4}}>· {ven.name}</span>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>{if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||"",price:String(b.price||""),color:b.color||""});const ev=vendors.find(v=>v.id===b.vid);setVenSearch(ev?.name||"");}}} style={{background:"none",border:"none",color:isE?C.acc:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:C.fn}}>{isE?"취소":"수정"}</button><button onClick={()=>{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).filter(x=>x.id!==b.id)}}));if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div></div></div>;})}</div>}
+            <div style={{background:"#F0F4FF",borderRadius:12,padding:"14px",marginBottom:12,border:`1px dashed ${C.acc}60`}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.acc,marginBottom:10}}>✏️ [{selColor}] 원부자재 {editBomId?"수정":"추가"}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{MAT_TYPES.map(t=>{const act=br.type===t;return<button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div>
+              <FCard mb={8}>
+                <FRow label="업체명"><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>v.name?.includes(venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow>
+                <FRow label={br.type==="단추"?"단추명":br.type==="지퍼"?"지퍼명":br.type==="기타"?"부자재명":"원단명"} req><FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph={br.type==="단추"?"예: 요크유광 11.5mm":br.type==="지퍼"?"예: YKK 3호 혼솔":br.type==="기타"?"예: 다림질 테이프":"예: 30수 면 싱글"}/></FRow>
+                <FRow label="소재 색상"><FInp val={br.color} onChange={v=>setBr(r=>({...r,color:v}))} ph="예: 핑크, 그레이"/></FRow>
+                <FRow label={`소요량 (${getUnit(br.type)})`} req><FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0" type="number"/><span style={{background:["단추","지퍼","기타"].includes(br.type)?C.warn+"20":C.acc+"15",color:["단추","지퍼","기타"].includes(br.type)?C.warn:C.acc,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700,flexShrink:0,marginLeft:6}}>{getUnit(br.type)}</span></FRow>
+                <FRow label="단가" last><FInp val={br.price||""} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>원</span></FRow>
+              </FCard>
+              <Btn ch={editBomId?"✓ 수정 완료":"+ 추가"} full onClick={addBom} disabled={!br.mat||!br.amt}/>
+            </div>
+          </>:<div style={{textAlign:"center",padding:"24px 0",color:C.sub,fontSize:13}}>위에서 색상 탭을 선택하세요 👆</div>}
+          <div style={{display:"flex",gap:10,marginTop:4}}><Btn ch="← 이전" v="w" full st={{flex:1}} onClick={()=>setSheetStep(0)}/><Btn ch="저장 완료" full st={{flex:2}} onClick={save} disabled={!f.name}/></div>
+        </>}
+      </Sheet>}
     </div>
   );
 }
@@ -509,6 +726,7 @@ function VendorPage({vendors,setVendors,user}){
 function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [facSheet,setFacSheet]=useState(null);
   const [profileSheet,setProfileSheet]=useState(false);
+
   const [pf,setPf]=useState({
     name:user.name||"",
     company:user.company||"",
@@ -596,173 +814,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
         <Field label="연락처" req><TxtInp val={pf.tel} onChange={v=>setPf(p=>({...p,tel:v}))} ph="010-0000-0000" type="tel"/></Field>
         <Field label="사무실 주소"><TxtInp val={pf.address} onChange={v=>setPf(p=>({...p,address:v}))} ph="주소를 입력하세요"/></Field>
         <G/><div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setProfileSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={saveProfile}/></div>
-      </Sheet>}
-    </div>
-  );
-}
-
-function ProdsPage({products,setProducts,vendors,factories,user}){
-  const [catF,setCatF]=useState("전체");
-  const [sheet,setSheet]=useState(false);
-  const [sheetStep,setSheetStep]=useState(0);
-  const [selColor,setSelColor]=useState("");
-  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});
-  const [ci,setCi]=useState("");
-  const [br,setBr]=useState({type:"",mat:"",amt:"",vid:"",price:"",color:""});
-  const [editBomId,setEditBomId]=useState(null);
-  const [venSearch,setVenSearch]=useState("");
-  const sf=k=>v=>setF(p=>({...p,[k]:v}));
-  const getUnit=t=>["단추","지퍼","기타"].includes(t)?"개":"yd";
-  const filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
-
-  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
-  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
-
-  function copyProd(p){
-    setF({
-      ...p,
-      id: undefined, 
-      name: p.name + " (복사본)", 
-      colors: [...(p.colors||[])],
-      colorBom: JSON.parse(JSON.stringify(p.colorBom||{})) 
-    });
-    setCi("");
-    setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});
-    setVenSearch("");
-    setSheetStep(0);
-    setSelColor("");
-    setEditBomId(null);
-    setSheet(true);
-  }
-
-  function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c],colorBom:{...p.colorBom,[c]:p.colorBom[c]||[]}}));setCi("");}
-  function removeColor(c){setF(p=>{const nb={...p.colorBom};delete nb[c];return{...p,colors:p.colors.filter(x=>x!==c),colorBom:nb};});if(selColor===c)setSelColor("");}
-
-  function goToStep1(){
-    if(!f.name||f.colors.length===0){alert("상품명과 색상을 하나 이상 입력하세요");return;}
-    setF(p=>{const nb={...p.colorBom};p.colors.forEach(c=>{if(!nb[c])nb[c]=[];});return{...p,colorBom:nb};});
-    setSelColor(f.colors[0]);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setEditBomId(null);setSheetStep(1);
-  }
-
-  function addBom(){
-    if(!br.mat||!br.amt)return;
-    if(editBomId){setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt)}:b)}}));setEditBomId(null);}
-    else{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:[...(p.colorBom[selColor]||[]),{...br,id:uid(),amt:Number(br.amt),unit:getUnit(br.type)}]}}));}
-    setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
-  }
-
-  async function save(){
-    if(!f.name)return;
-    const sd={
-      name:f.name,
-      category:f.category,
-      season:f.season,
-      factory_id:f.factoryId||null,
-      factory:f.factory,
-      factory_tel:f.factoryTel,
-      colors:f.colors,
-      color_bom:f.colorBom 
-    };
-
-    try{
-      if(f.id&&user?.token){
-        const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);return;}
-        setProducts(products.map(p=>p.id===f.id?{...f}:p));
-      }
-      else if(user?.token){
-        const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
-        if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);
-          return;
-        }
-        const newProd = r[0];
-        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
-      }
-    }catch(e){
-      alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
-      return;
-    }
-    setSheet(false);
-  }
-
-  async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"products",id);}catch{}setProducts(products.filter(p=>p.id!==id));}
-
-  const curBom=f.colorBom[selColor]||[];
-
-  return(
-    <div style={{padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>상품 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
-      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{["전체",...CATS].map(cat=>{const cnt=cat==="전체"?products.length:products.filter(p=>p.category===cat).length;const act=catF===cat;return<button key={cat} onClick={()=>setCatF(cat)} style={{padding:"6px 12px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat} {cnt}</button>;})}
-      </div>
-      {filtered.length===0?<Empty icon="👕" text="등록된 상품이 없습니다"/>:filtered.map(p=>(
-        <Card key={p.id} st={{marginBottom:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{(p.colors||[]).map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 8px",fontSize:11,color:C.sub2,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div>
-              <div style={{color:C.sub,fontSize:11}}>
-                {p.factory&&`📍 ${p.factory}`}
-                {p.colorBom&&Object.values(p.colorBom).some(b=>b.length>0)&&` · BOM 등록됨`}
-                {!p.colorBom&&(p.bom?.length>0)&&` · BOM ${p.bom.length}종 (구버전)`}
-              </div>
-            </div>
-            <div style={{display:"flex",gap:6,flexShrink:0,marginLeft:8}}>
-              <Btn ch="복사" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.acc}} onClick={()=>copyProd(p)}/>
-              <Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(p)}/>
-              <Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(p.id)}/>
-            </div>
-          </div>
-        </Card>
-      ))}
-      {sheet&&<Sheet title={f.id?"상품 수정":"상품 등록"} onClose={()=>setSheet(false)}>
-        <StepBar cur={sheetStep} total={2}/>
-        {sheetStep===0&&<>
-          <div style={{fontSize:12,fontWeight:600,color:C.sub,marginBottom:8}}>기본 정보</div>
-          <FCard>
-            <FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow>
-            <FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
-            <FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
-          </FCard>
-          {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-            <span style={{fontSize:12,fontWeight:700,color:C.txt}}>발주 색상 목록</span>
-            <span style={{fontSize:11,color:C.warn}}>* 1개 이상 필수</span>
-          </div>
-          <div style={{background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:10,padding:"12px",marginBottom:20}}>
-            <div style={{display:"flex",flexWrap:"wrap",gap:7,minHeight:36,marginBottom:f.colors.length>0?10:0}}>
-              {f.colors.map(c=><span key={c} style={{background:C.acc+"12",border:`1.5px solid ${C.acc}`,color:C.acc,borderRadius:20,padding:"5px 12px",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>{c}<button onClick={()=>removeColor(c)} style={{background:"none",border:"none",color:C.acc,cursor:"pointer",fontSize:13,padding:0,lineHeight:1}}>✕</button></span>)}
-              {f.colors.length===0&&<span style={{color:C.sub,fontSize:12,alignSelf:"center"}}>아직 색상 없음</span>}
-            </div>
-            <div style={{display:"flex",gap:6}}>
-              <input value={ci} onChange={e=>setCi(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addColor()} placeholder="색상명 입력 (예: 블랙, 네이비)" style={{flex:1,border:`1px solid ${C.bdr}`,borderRadius:8,padding:"9px 12px",fontSize:13,fontFamily:C.fn,outline:"none",color:C.txt}}/>
-              <button onClick={addColor} style={{background:C.acc,border:"none",color:"#fff",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:C.fn,flexShrink:0}}>+ 추가</button>
-            </div>
-          </div>
-          <Btn ch="다음 : 원부자재 등록 →" full onClick={goToStep1} disabled={!f.name||f.colors.length===0} st={{borderRadius:10,height:50,fontSize:14}}/>
-        </>}
-        {sheetStep===1&&<>
-          <div style={{fontSize:12,color:C.sub,marginBottom:12}}>색상 탭을 선택하고 원부자재를 등록하세요</div>
-          <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
-            {f.colors.map(c=>{const cnt=(f.colorBom[c]||[]).length;const act=selColor===c;return<button key={c} onClick={()=>{setSelColor(c);setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}} style={{padding:"8px 16px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`2px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6}}>{c}{cnt>0&&<span style={{background:act?"rgba(255,255,255,0.25)":"#EEF2FF",color:act?"#fff":C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{cnt}</span>}</button>;})}</div>
-          {selColor?<>
-            {curBom.length>0&&<div style={{marginBottom:10}}>{curBom.map(b=>{const ven=vendors.find(v=>v.id===b.vid);const isE=editBomId===b.id;return<div key={b.id} style={{background:isE?C.acc+"10":"#F8F9FB",borderRadius:8,padding:"9px 12px",marginBottom:6,border:`1.5px solid ${isE?C.acc:C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{flex:1,minWidth:0}}><span style={{background:C.acc+"15",color:C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,marginRight:6}}>{b.type||"원단"}</span><span style={{fontWeight:700,fontSize:12}}>{b.mat}</span>{b.color&&<span style={{background:C.sub+"18",color:C.sub2,borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600,marginLeft:5}}>{b.color}</span>}<span style={{color:C.sub,fontSize:11,marginLeft:6}}>{b.amt}{b.unit||"yd"}</span>{ven&&<span style={{color:C.sub,fontSize:11,marginLeft:4}}>· {ven.name}</span>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>{if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||"",price:String(b.price||""),color:b.color||""});const ev=vendors.find(v=>v.id===b.vid);setVenSearch(ev?.name||"");}}} style={{background:"none",border:"none",color:isE?C.acc:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:C.fn}}>{isE?"취소":"수정"}</button><button onClick={()=>{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).filter(x=>x.id!==b.id)}}));if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div></div></div>;})}</div>}
-            <div style={{background:"#F0F4FF",borderRadius:12,padding:"14px",marginBottom:12,border:`1px dashed ${C.acc}60`}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.acc,marginBottom:10}}>✏️ [{selColor}] 원부자재 {editBomId?"수정":"추가"}</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{MAT_TYPES.map(t=>{const act=br.type===t;return<button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div>
-              <FCard mb={8}>
-                <FRow label="업체명"><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 검색" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>v.name?.includes(venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow>
-                <FRow label={br.type==="단추"?"단추명":br.type==="지퍼"?"지퍼명":br.type==="기타"?"부자재명":"원단명"} req><FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph={br.type==="단추"?"예: 요크유광 11.5mm":br.type==="지퍼"?"예: YKK 3호 혼솔":br.type==="기타"?"예: 다림질 테이프":"예: 30수 면 싱글"}/></FRow>
-                <FRow label="소재 색상"><FInp val={br.color} onChange={v=>setBr(r=>({...r,color:v}))} ph="예: 핑크, 그레이"/></FRow>
-                <FRow label={`소요량 (${getUnit(br.type)})`} req><FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0" type="number"/><span style={{background:["단추","지퍼","기타"].includes(br.type)?C.warn+"20":C.acc+"15",color:["단추","지퍼","기타"].includes(br.type)?C.warn:C.acc,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700,flexShrink:0,marginLeft:6}}>{getUnit(br.type)}</span></FRow>
-                <FRow label="단가" last><FInp val={br.price||""} onChange={v=>setBr(r=>({...r,price:v}))} ph="0" type="number"/><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>원</span></FRow>
-              </FCard>
-              <Btn ch={editBomId?"✓ 수정 완료":"+ 추가"} full onClick={addBom} disabled={!br.mat||!br.amt}/>
-            </div>
-          </>:<div style={{textAlign:"center",padding:"24px 0",color:C.sub,fontSize:13}}>위에서 색상 탭을 선택하세요 👆</div>}
-          <div style={{display:"flex",gap:10,marginTop:4}}><Btn ch="← 이전" v="w" full st={{flex:1}} onClick={()=>setSheetStep(0)}/><Btn ch="저장 완료" full st={{flex:2}} onClick={save} disabled={!f.name}/></div>
-        </>}
       </Sheet>}
     </div>
   );
