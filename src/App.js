@@ -209,7 +209,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     const newOrders = [];
 
     for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      const o = { items: groupItems, memo, status: "진행중", date: d, ts };
+      // 수정된 부분: DB 에러를 막기 위해 DB에 저장할 때 memo 데이터는 제외합니다.
+      const o = { items: groupItems, status: "진행중", date: d, ts };
       try{
         if(user?.token){
           const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
@@ -239,7 +240,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         if(!ven)continue;
         const soyo=Math.round(b.amt*it.qty*100)/100;
         if(!venMap[ven.id])venMap[ven.id]={vendor:ven,lines:[]};
-        // 발송 내역에 상품 정보(prod)도 같이 포함하여 나중에 품목별로 묶을 수 있게 함
         venMap[ven.id].lines.push({mat:b.mat,color:b.color||it.color,soyo,unit:b.unit||"yd",prod});
       }
     }
@@ -248,10 +248,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     let cnt=0;
     for(const{vendor,lines}of targets){
       const companyName=user?.company||"디자인워커스";
-      // 1. 거래처 담당자에게 보내는 인사말 추가
       let body=`${vendor.name} 담당자님 안녕하세요.\n\n업체명 : ${companyName}\n\n`;
       
-      // 2. 발주 품목별로 원부자재 그룹화
       const prodMap={};
       for(const l of lines){
         const pName=l.prod?.name||"-";
@@ -260,7 +258,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         prodMap[pName].matMap[l.mat].colors.push(`${l.color} ${fmtN(l.soyo)}${l.unit}`);
       }
 
-      // 3. 그룹화된 데이터 출력 포맷 맞추기
       for(const[pName,pData]of Object.entries(prodMap)){
         for(const m of Object.values(pData.matMap)){
           body+=`${m.mat}\n`;
@@ -270,7 +267,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         body+=`품목 : ${pName}\n\n`;
       }
       
-      // 입고처 정보 (가장 첫 번째 아이템의 공장 정보 기준)
       const p=lines[0]?.prod;
       body+=`입고처 : ${p?.factory||"-"}\n`;
       const factoryObj=factories?.find(f=>f.name===p?.factory);
