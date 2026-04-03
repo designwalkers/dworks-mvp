@@ -401,7 +401,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         <Btn ch="+ 발주 리스트에 추가" full onClick={addItem} disabled={!selProd||!selColor||!qty} st={{marginBottom:18}}/>
         <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 리스트</div>
         
-        {/* 🚀 발주 리스트(장바구니)에서 수량을 바로 수정할 수 있도록 입력창 적용 */}
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
             const p=products.find(x=>x.id===it.pid);
@@ -477,7 +476,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
   const [sheet,setSheet]=useState(false);
   const [sheetStep,setSheetStep]=useState(0);
   const [selColor,setSelColor]=useState("");
-  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});
+  const [f,setF]=useState({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{},imageUrl:""});
   const [ci,setCi]=useState("");
   const [br,setBr]=useState({type:"",mat:"",amt:"",vid:"",price:"",color:""});
   const [editBomId,setEditBomId]=useState(null);
@@ -491,8 +490,8 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
   else if(sortOrd==="시즌별") filtered=[...filtered].sort((a,b)=>(b.season||"").localeCompare(a.season||""));
   else if(sortOrd==="공장별") filtered=[...filtered].sort((a,b)=>(a.factory||"").localeCompare(b.factory||""));
 
-  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
-  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})}});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{},imageUrl:""});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})},imageUrl:p.imageUrl||""});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
 
   function copyProd(p){
     setF({
@@ -500,7 +499,8 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
       id: undefined, 
       name: p.name + " (복사본)", 
       colors: [...(p.colors||[])],
-      colorBom: JSON.parse(JSON.stringify(p.colorBom||{})) 
+      colorBom: JSON.parse(JSON.stringify(p.colorBom||{})),
+      imageUrl: p.imageUrl||""
     });
     setCi("");
     setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});
@@ -513,6 +513,18 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 
   function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c],colorBom:{...p.colorBom,[c]:p.colorBom[c]||[]}}));setCi("");}
   function removeColor(c){setF(p=>{const nb={...p.colorBom};delete nb[c];return{...p,colors:p.colors.filter(x=>x!==c),colorBom:nb};});if(selColor===c)setSelColor("");}
+
+  // 🚀 이미지 업로드 처리 (Base64 형식)
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if(file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setF(prev => ({...prev, imageUrl: reader.result}));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   function goToStep1(){
     if(!f.name||f.colors.length===0){alert("상품명과 색상을 하나 이상 입력하세요");return;}
@@ -537,23 +549,24 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
       factory:f.factory,
       factory_tel:f.factoryTel,
       colors:f.colors,
-      colorBom:f.colorBom 
+      color_bom:f.colorBom,
+      image_url:f.imageUrl // 이미지 데이터 DB에 추가
     };
 
     try{
       if(f.id&&user?.token){
         const r=await DB.update(user.token,"products",f.id,sd);
-        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);return;}
+        if(r.error||r.code){alert(`[상품 수정 실패] Supabase products 테이블에 'image_url' 컬럼(text 타입)을 추가했는지 확인해주세요!`);return;}
         setProducts(products.map(p=>p.id===f.id?{...f}:p));
       }
       else if(user?.token){
         const r=await DB.insert(user.token,"products",{...sd,user_id:user.id});
         if(r.error||r.code||!Array.isArray(r)||r.length===0){
-          alert(`[상품 등록 실패] Supabase products 테이블에 'color_bom' 컬럼을 반드시 추가해주세요! 대시보드 확인 요망.`);
+          alert(`[상품 등록 실패] Supabase products 테이블에 'image_url' 컬럼(text 타입)을 추가했는지 확인해주세요!`);
           return;
         }
         const newProd = r[0];
-        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{}}]);
+        setProducts(p=>[...p,{...newProd,factoryId:newProd.factory_id||"",factoryTel:newProd.factory_tel||"",colors:newProd.colors||[],colorBom:newProd.color_bom||{},imageUrl:newProd.image_url||""}]);
       }
     }catch(e){
       alert("[네트워크 에러] 상품이 저장되지 않았습니다.");
@@ -581,7 +594,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
         <Card key={p.id} st={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div style={{flex:1}}>
-              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}><span style={{fontWeight:800,fontSize:14}}>{p.name}</span>{p.imageUrl&&<span style={{fontSize:12}}>🖼️</span>}{p.category&&<Tag ch={p.category} c={CAT_C[p.category]||C.sub}/>}<Tag ch={p.season} c={C.acc}/></div>
               <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:4}}>{(p.colors||[]).map(c=><span key={c} style={{background:C.bg,borderRadius:20,padding:"2px 8px",fontSize:11,color:C.sub2,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div>
               <div style={{color:C.sub,fontSize:11}}>
                 {p.factory&&`📍 ${p.factory}`}
@@ -609,6 +622,28 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
             <FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
           </FCard>
           {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
+
+          {/* 🚀 작업지시서 사진 업로드 영역 */}
+          <Field label="작업지시서 (선택)">
+            <div style={{border: `1px dashed ${C.bdr}`, borderRadius: 8, padding: 16, textAlign: "center", background: "#fff", position: "relative"}}>
+              {f.imageUrl ? (
+                 <div>
+                   <img src={f.imageUrl} alt="작업지시서" style={{maxWidth: "100%", maxHeight: 200, objectFit: "contain", borderRadius: 4}} />
+                   <div style={{marginTop: 8}}>
+                     <Btn ch="사진 변경" v="w" sz="s" onClick={()=>document.getElementById('img-upload').click()}/>
+                     <Btn ch="삭제" v="w" sz="s" st={{marginLeft: 8, color: C.red}} onClick={()=>setF(p=>({...p, imageUrl:""}))}/>
+                   </div>
+                 </div>
+              ) : (
+                 <div onClick={()=>document.getElementById('img-upload').click()} style={{cursor: "pointer", color: C.sub}}>
+                   <div style={{fontSize: 24, marginBottom: 8}}>📸</div>
+                   <div style={{fontSize: 12}}>클릭하여 작업지시서 사진 업로드</div>
+                 </div>
+              )}
+              <input id="img-upload" type="file" accept="image/*" onChange={handleImageUpload} style={{display: "none"}} />
+            </div>
+          </Field>
+
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <span style={{fontSize:12,fontWeight:700,color:C.txt}}>발주 색상 목록</span>
@@ -907,7 +942,8 @@ export default function App(){
       }
       setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||""})):[]);
-      setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[]})):[]);
+      // 🚀 이미지 URL 매핑
+      setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[], imageUrl:x.image_url||""})):[]);
       setOrders(Array.isArray(o)?o:[]);
     }catch(e){
       try{localStorage.removeItem("dworks_session");}catch{}
