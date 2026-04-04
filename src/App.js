@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-// ── Supabase & API (압축 최적화) ─────────────────────────────────
+// ── Supabase & API (기존 코드 유지) ─────────────────────────────────
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined});return r.json();};
@@ -8,7 +8,7 @@ const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:p
 const EJS={SID:"service_raca1ke",TID:"template_hoej0ts",PK:"KlYRj7B6JNO01D2pm"};
 const sendEmail=async(to,name,sub,msg)=>{if(!to)return false;try{const r=await fetch("https://api.emailjs.com/api/v1.0/email/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service_id:EJS.SID,template_id:EJS.TID,user_id:EJS.PK,template_params:{to_email:to,to_name:name,subject:sub,message:msg,from_name:"D-Works"}})});return r.status===200;}catch{return false;}};
 
-// ── 유틸 및 상수 ────────────────────────────────────────────
+// ── 유틸 및 상수 (기존 코드 유지) ────────────────────────────────────────────
 const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
 const getCho=s=>(s||"").split("").map(c=>{const cd=c.charCodeAt(0);return(cd>=44032&&cd<=55203)?CHO[Math.floor((cd-44032)/588)]:c;}).join("");
 const match=(t,q)=>{if(!q)return true;const txt=(t||"").toLowerCase(),qry=(q||"").toLowerCase();return txt.includes(qry)||getCho(txt).includes(getCho(qry));};
@@ -25,7 +25,7 @@ const SEASONS=["26SS","26FW","25SS","25FW"];
 const MAT_TYPES=["메인원단","부속원단","단추","지퍼","안감","심지","기타"];
 const BIZ_TYPES=["다이마루","직기","니트","데님","기타"];
 
-// ── 공통 UI ───────────────────────────────────────────────────
+// ── 공통 UI (기존 코드 유지) ───────────────────────────────────────────────────
 const Btn=({ch,onClick,v="p",full,disabled,sz="m",st={}})=>{
   const bg={p:C.acc,w:"#fff",ok:C.ok,d:C.bg}[v]||C.acc;
   const cl={p:"#fff",w:C.txt,ok:"#fff",d:C.sub}[v]||"#fff";
@@ -69,7 +69,7 @@ function LineChart({data}){
   return<svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:H}}><path d={area} fill={C.acc+"18"}/><polyline points={pts.map(p=>p.join(",")).join(" ")} fill="none" stroke={C.acc} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>{pts.map(([x,y],i)=><circle key={i} cx={x} cy={y} r="3" fill={C.acc}/>)}</svg>;
 }
 
-// ── Splash 및 인증 ────────────────────────────────────────────────
+// ── Splash 및 인증 (기존 코드 유지) ────────────────────────────────────────────────
 function SplashPage({onStart}){
   const [slide,setSlide]=useState(0);
   const slides=[{title:"발주 업무,\n이제 자동으로",desc:"수기 계산·카카오톡 개별 발주\n이제 그만!",icon:"📋"},{title:"BOM 기반\n소요량 자동 계산",desc:"상품별 원부자재를 등록하면\n소요량이 자동 계산됩니다.",icon:"🧮"},{title:"거래처별\n원클릭 발송",desc:"업체별 발주서를 자동 생성하고\n이메일로 즉시 발송합니다.",icon:"📧"},{title:"발주 이력\n데이터화",desc:"모든 발주가 DB에 저장되어\n언제든 조회 가능합니다.",icon:"📊"}];
@@ -366,7 +366,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   );
 }
 
-// 🚀 텍스트 밀림, 버튼 늘어짐 완벽 수정한 ProdsPage 🚀
+// 🚀 텍스트 밀림, 버튼 늘어짐 완벽 수정한 ProdsPage (기존 코드 유지) 🚀
 function ProdsPage({products,setProducts,vendors,factories,user}){
   const [catF,setCatF]=useState("전체");
   const [prodSearch,setProdSearch]=useState("");
@@ -455,7 +455,6 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
         <Card key={p.id} st={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             
-            {/* 왼쪽 정보 영역 (minWidth 추가로 글자 밀림 현상 완벽 방지) */}
             <div style={{flex:1, minWidth:0, paddingRight:12}}>
               <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:6}}>
                 <span style={{fontWeight:800,fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</span>
@@ -470,7 +469,6 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
               </div>
             </div>
 
-            {/* 오른쪽 버튼 영역 (alignItems: flex-end 추가로 버튼 가로로 늘어나는 현상 방지) */}
             <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0,alignItems:"flex-end"}}>
               <Btn ch="복사" v="w" sz="s" st={{padding:"4px 10px",fontSize:11,color:C.acc}} onClick={()=>copyProd(p)}/>
               <div style={{display:"flex", gap:5}}>
@@ -510,7 +508,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
                    <div style={{fontSize: 12}}>클릭하여 작업지시서 사진 업로드</div>
                  </div>
               )}
-              <input id="img-upload" type="file" accept="image/*" onChange={handleImageUpload} style={{display: "none"}} />
+              <input id="img-upload" type="file" accept="image/*" onChange={handleImageUpload} style={{display:"none"}} />
             </div>
           </Field>
 
@@ -779,13 +777,13 @@ export default function App(){
   async function handleLogin(u){try{localStorage.setItem("dworks_session",JSON.stringify(u));}catch{}setUser(u);setScreen("app");await loadData(u.token);}
   async function handleLogout(){if(user?.token)try{await DB.signOut(user.token);}catch{}try{localStorage.removeItem("dworks_session");}catch{}setUser(null);setScreen("auth");setVendors([]);setFactories([]);setProducts([]);setOrders([]);}
 
-  // 🚀 요청하신 원래 메뉴 "완벽 복원" 🚀
+  // 🚀 요청하신 하단 탭 메뉴 (아이콘 제거, 텍스트 전용) 🚀
   const TABS=[
-    {k:"order",i:"📝",l:"발주하기"},
-    {k:"prods",i:"👕",l:"상품"},
-    {k:"list",i:"📋",l:"발주리스트"},
-    {k:"vendors",i:"🏭",l:"거래처"},
-    {k:"settings",i:"⚙️",l:"설정"}
+    {k:"order", l:"발주하기"},
+    {k:"prods", l:"상품"},
+    {k:"list", l:"발주리스트"},
+    {k:"vendors", l:"거래처"},
+    {k:"settings", l:"설정"}
   ];
 
   if(screen==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#fff",fontFamily:C.fn}}><div style={{textAlign:"center"}}><div style={{fontSize:28,fontWeight:900,color:C.acc,marginBottom:12}}>D-Works</div><div style={{width:32,height:32,border:`3px solid ${C.bdr}`,borderTop:`3px solid ${C.acc}`,borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div></div>;
@@ -805,13 +803,29 @@ export default function App(){
   return(
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.fn,color:C.txt,maxWidth:480,margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
       <div style={{background:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`}}>
-        {/* 🚀 상단 로고를 누르면 대시보드로 이동합니다 🚀 */}
         <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:19,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
         <span style={{color:C.sub,fontSize:12,fontWeight:600}}>{user.name}</span>
       </div>
       <div style={{paddingBottom:80}}>{pages[page]||pages["dash"]}</div>
-      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:50}}>
-        {TABS.map(t=><button key={t.k} onClick={()=>setPage(t.k)} style={{flex:1,padding:"9px 4px",background:"none",border:"none",color:page===t.k?C.acc:C.sub,cursor:"pointer",fontFamily:C.fn,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}><div style={{width:28,height:28,borderRadius:9,background:page===t.k?C.acc+"15":"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{fontSize:16}}>{t.i}</span></div><span style={{fontSize:9,fontWeight:page===t.k?700:500}}>{t.l}</span></button>)}
+      
+      {/* 🚀 하단 메뉴바: 박스 형태, 아이콘 제거 버전 🚀 */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:50, height:65}}>
+        {TABS.map(t=><button key={t.k} onClick={()=>setPage(t.k)} style={{
+          flex:1,
+          background:page===t.k?C.acc+"08":"none",
+          border:"none",
+          borderRight:t.k!=="settings"?`1px solid ${C.bdr}`:"none", // 박스 구분선
+          color:page===t.k?C.acc:C.sub2,
+          cursor:"pointer",
+          fontFamily:C.fn,
+          display:"flex",
+          alignItems:"center",
+          justifyContent:"center",
+          padding:"0 4px",
+          transition:"all 0.2s"
+        }}>
+          <span style={{fontSize:12, fontWeight:page===t.k?800:600, textAlign:"center", lineHeight:1.2}}>{t.l}</span>
+        </button>)}
       </div>
     </div>
   );
