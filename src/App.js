@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+\import React, { useState, useEffect } from "react";
 
-// ── Supabase & API (기본 유지) ─────────────────────────────────
+// ── Supabase & API ─────────────────────────────────
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined});return r.json();};
@@ -8,7 +8,7 @@ const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:p
 const EJS={SID:"service_raca1ke",TID:"template_hoej0ts",PK:"KlYRj7B6JNO01D2pm"};
 const sendEmail=async(to,name,sub,msg)=>{if(!to)return false;try{const r=await fetch("https://api.emailjs.com/api/v1.0/email/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service_id:EJS.SID,template_id:EJS.TID,user_id:EJS.PK,template_params:{to_email:to,to_name:name,subject:sub,message:msg,from_name:"D-Works"}})});return r.status===200;}catch{return false;}};
 
-// ── 유틸 및 상수 (기존 원본 그대로) ────────────────────────────────────────────
+// ── 유틸 및 상수 ────────────────────────────────────────────
 const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
 const getCho=s=>(s||"").split("").map(c=>{const cd=c.charCodeAt(0);return(cd>=44032&&cd<=55203)?CHO[Math.floor((cd-44032)/588)]:c;}).join("");
 const match=(t,q)=>{if(!q)return true;const txt=(t||"").toLowerCase(),qry=(q||"").toLowerCase();return txt.includes(qry)||getCho(txt).includes(getCho(qry));};
@@ -94,7 +94,7 @@ function SplashPage({onStart}){
 
 function AuthPage({onLogin}){
   const [tab,setTab]=useState("in");
-  const [f,setF]=useState({company:"",brand:"",name:"",position:"",tel:"",email:"",pw:"",pw2:"",address:"",agree:false});
+  const [f,setF]=useState({company:"",brand:"",name:"",position:"",tel:"",email:"",pw:"",pw2:"",address:"",agree:false, keepLoggedIn: true});
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
@@ -116,12 +116,12 @@ function AuthPage({onLogin}){
         if(r.error){setErr(r.error.message.includes("already")?"이미 가입된 이메일":r.error.message);return;}
         const r2=await DB.signIn(f.email,f.pw);
         if(!r2.access_token){setErr("가입완료! 로그인해주세요");setTab("in");return;}
-        onLogin({token:r2.access_token,id:r2.user.id,...f});
+        onLogin({token:r2.access_token,id:r2.user.id,...f}, f.keepLoggedIn);
       }else{
         const r=await DB.signIn(f.email,f.pw);
         if(!r.access_token){setErr("이메일 또는 비밀번호 오류");return;}
         const meta=r.user?.user_metadata||{};
-        onLogin({token:r.access_token,id:r.user.id,name:meta.name||f.email.split("@")[0],company:meta.company||"",email:r.user.email,tel:meta.tel||"",brand:meta.brand||"",position:meta.position||"",address:meta.address||""});
+        onLogin({token:r.access_token,id:r.user.id,name:meta.name||f.email.split("@")[0],company:meta.company||"",email:r.user.email,tel:meta.tel||"",brand:meta.brand||"",position:meta.position||"",address:meta.address||""}, f.keepLoggedIn);
       }
     }catch(e){setErr("네트워크 오류");}
     finally{setLoading(false);}
@@ -147,6 +147,15 @@ function AuthPage({onLogin}){
         )}
         <Field label="이메일" req><TxtInp val={f.email} onChange={sf("email")} ph="example@email.com" type="email"/></Field>
         <Field label="비밀번호" req><TxtInp val={f.pw} onChange={sf("pw")} ph={tab==="up"?"6자 이상":"비밀번호"} type="password" onKeyDown={e=>e.key==="Enter"&&submit()}/></Field>
+        
+        {/* 🚀 로그인 유지 체크박스 🚀 */}
+        {tab==="in" && (
+          <label style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:10, padding:"4px 0"}}>
+            <input type="checkbox" checked={f.keepLoggedIn} onChange={e=>sf("keepLoggedIn")(e.target.checked)} style={{width:16, height:16}} />
+            <span style={{fontSize:13, fontWeight:600, color:C.sub2}}>로그인 상태 유지</span>
+          </label>
+        )}
+
         {tab==="up" && (
           <>
             <Field label="비밀번호 확인" req><TxtInp val={f.pw2} onChange={sf("pw2")} ph="비밀번호 재입력" type="password"/></Field>
@@ -362,7 +371,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   );
 }
 
-// 🚀 상품 관리 (기존 원본 그대로 복구) 🚀
 function ProdsPage({products,setProducts,vendors,factories,user}){
   const [catF,setCatF]=useState("전체");
   const [prodSearch,setProdSearch]=useState("");
@@ -549,7 +557,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
   );
 }
 
-// 🚀 발주 리스트 (원본 디자인 완벽 복구) 🚀
+// 🚀 발주 리스트 🚀
 function ListPage({orders,setOrders,products,user,onNav}){
   const [filter,setFilter]=useState("전체");
   const [dateFilter,setDateFilter]=useState("전체");
@@ -749,24 +757,43 @@ export default function App(){
     async function checkSession(){
       try{
         const s=localStorage.getItem("dworks_session");
-        if(s){const u=JSON.parse(s);setUser(u);setScreen("app");loadData(u.token);}
-        else setScreen("splash");
+        if(s){
+          const u=JSON.parse(s);
+          if(u?.token){
+            // 토큰 유효성 검사
+            const r=await fetch(`${SB}/auth/v1/user`,{headers:{"apikey":KEY,"Authorization":`Bearer ${u.token}`}});
+            if(r.ok){
+              setUser(u);
+              setScreen("app");
+              loadData(u.token);
+              return;
+            }
+          }
+        }
       }catch{}
+      setScreen("splash");
     }
     checkSession();
   },[]);
 
-  async function handleLogin(u){try{localStorage.setItem("dworks_session",JSON.stringify(u));}catch{}setUser(u);setScreen("app");await loadData(u.token);}
-  async function handleLogout(){try{localStorage.removeItem("dworks_session");}catch{}setUser(null);setScreen("auth");}
+  async function handleLogin(u, keep){
+    if(keep) {
+      try{localStorage.setItem("dworks_session",JSON.stringify(u));}catch{}
+    } else {
+      try{localStorage.removeItem("dworks_session");}catch{}
+    }
+    setUser(u);
+    setScreen("app");
+    await loadData(u.token);
+  }
 
-  // 🚀 하단 탭 메뉴 설정 (아이콘 제거 박스 버전) 🚀
-  const TABS=[
-    {k:"order", l:"발주하기"},
-    {k:"prods", l:"상품"},
-    {k:"list", l:"발주리스트"},
-    {k:"vendors", l:"거래처"},
-    {k:"settings", l:"설정"}
-  ];
+  async function handleLogout(){
+    try{localStorage.removeItem("dworks_session");}catch{}
+    setUser(null);
+    setScreen("auth");
+  }
+
+  const TABS=[{k:"order", l:"발주하기"},{k:"prods", l:"상품"},{k:"list", l:"발주리스트"},{k:"vendors", l:"거래처"},{k:"settings", l:"설정"}];
 
   if(screen==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>로딩 중...</div>;
   if(screen==="splash")return<SplashPage onStart={()=>setScreen("auth")}/>;
@@ -774,7 +801,7 @@ export default function App(){
 
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
-    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user}/>,
+    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
     list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} onNav={setPage}/>,
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
@@ -785,17 +812,11 @@ export default function App(){
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.fn,maxWidth:480,margin:"0 auto",position:"relative",boxShadow:"0 0 40px rgba(0,0,0,0.1)"}}>
       <div style={{background:"#fff",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`}}>
         <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.acc,fontWeight:900,fontSize:19,cursor:"pointer",fontFamily:C.fn,letterSpacing:1}}>D-Works</button>
-        <span style={{color:C.sub,fontSize:12,fontWeight:600}}>
-          {user.brand ? user.brand : user.name}
-        </span>
+        <span style={{color:C.sub,fontSize:12,fontWeight:600}}>{user.brand ? user.brand : user.name}</span>
       </div>
       <div style={{paddingBottom:80}}>{pages[page]||pages["dash"]}</div>
-      
-      {/* 🚀 하단 메뉴바: 박스 형태 🚀 */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",zIndex:50, height:65}}>
-        {TABS.map(t=><button key={t.k} onClick={()=>setPage(t.k)} style={{
-          flex:1, background:page===t.k?C.acc+"08":"none", border:"none", borderRight:t.k!=="settings"?`1px solid ${C.bdr}`:"none", color:page===t.k?C.acc:C.sub2, cursor:"pointer", fontFamily:C.fn, display:"flex", alignItems:"center", justifyContent:"center", padding:"0 4px", transition:"all 0.2s"
-        }}>
+        {TABS.map(t=><button key={t.k} onClick={()=>setPage(t.k)} style={{flex:1, background:page===t.k?C.acc+"08":"none", border:"none", borderRight:t.k!=="settings"?`1px solid ${C.bdr}`:"none", color:page===t.k?C.acc:C.sub2, cursor:"pointer", fontFamily:C.fn, display:"flex", alignItems:"center", justifyCenter:"center", padding:"0 4px", transition:"all 0.2s"}}>
           <span style={{fontSize:12, fontWeight:page===t.k?800:600, textAlign:"center", lineHeight:1.2}}>{t.l}</span>
         </button>)}
       </div>
