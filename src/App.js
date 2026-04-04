@@ -28,18 +28,18 @@ const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","�
 const getCho=s=>(s||"").split("").map(c=>{const cd=c.charCodeAt(0);return(cd>=44032&&cd<=55203)?CHO[Math.floor((cd-44032)/588)]:c;}).join("");
 const match=(t,q)=>{if(!q)return true;const txt=(t||"").toLowerCase(),qry=(q||"").toLowerCase();return txt.includes(qry)||getCho(txt).includes(getCho(qry));};
 
-// ── 상수 (디자인 시스템) ─────────────────────────────────────────
+// ── 상수 (디자인 시스템 전면 개편) ─────────────────────────────
 const C={
-  bg:"#F4F6FA",
-  card:"#FFFFFF",
-  bdr:"#EAECEF",
-  acc:"#3772FF",
-  txt:"#191F28",
-  sub:"#8B95A1",
+  bg:"#F4F6FA",      // 연한 회색 바탕
+  card:"#FFFFFF",    // 카드 흰색
+  bdr:"#EAECEF",     // 부드러운 테두리 선
+  acc:"#3772FF",     // 메인 블루
+  txt:"#191F28",     // 진한 텍스트
+  sub:"#8B95A1",     // 연한 텍스트
   sub2:"#6B7280",
-  ok:"#2DCA72",
+  ok:"#2DCA72",      // 초록색
   warn:"#FF9E1B",
-  red:"#F04452",
+  red:"#F04452",     // 빨간색
   fn:"'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif"
 };
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -54,7 +54,7 @@ const SEASONS=["26SS","26FW","25SS","25FW"];
 const MAT_TYPES=["메인원단","부속원단","단추","지퍼","안감","심지","기타"];
 const BIZ_TYPES=["다이마루","직기","니트","데님","기타"];
 
-// ── 공통 UI ───────────────────────────────────────────────────
+// ── 공통 UI (스타일 보정) ──────────────────────────────────────
 const Btn=({ch,onClick,v="p",full,disabled,sz="m",st={}})=>{
   const bg={p:C.acc,w:"#fff",ok:C.ok,d:"#F2F4F6"}[v]||C.acc;
   const cl={p:"#fff",w:C.txt,ok:"#fff",d:C.sub}[v]||"#fff";
@@ -69,7 +69,7 @@ const Tag=({ch,c=C.acc,tc="#fff"})=><span style={{background:c,color:tc,padding:
 const Card=({children,st={},onClick})=><div onClick={onClick} style={{background:"#fff",borderRadius:16,border:`1px solid ${C.bdr}`,padding:20,boxSizing:"border-box",boxShadow:"0 2px 10px rgba(0,0,0,0.02)",cursor:onClick?"pointer":"default",...st}}>{children}</div>;
 const Divider=()=><div style={{height:1,background:C.bdr,margin:"16px 0"}}/>;
 const G=({h=16})=><div style={{height:h}}/>;
-const Empty=({icon,text})=><div style={{textAlign:"center",padding:"50px 20px",color:C.sub,background:"#fff",borderRadius:16,border:`1px solid ${C.bdr}`}}><div style={{fontSize:40,marginBottom:12}}>{icon}</div><div style={{fontSize:15,fontWeight:600,color:C.sub}}>{text}</div></div>;
+const Empty=({icon,text})=><div style={{textAlign:"center",padding:"60px 20px",color:C.sub,background:"#fff",borderRadius:16,border:`1px solid ${C.bdr}`}}><div style={{fontSize:40,marginBottom:12}}>{icon}</div><div style={{fontSize:15,fontWeight:600,color:C.sub}}>{text}</div></div>;
 function Field({label,children,req}){return<div style={{marginBottom:20}}><div style={{fontSize:14,fontWeight:700,color:C.txt,marginBottom:10}}>{label}{req&&<span style={{color:C.acc,marginLeft:4}}>*</span>}</div>{children}</div>;}
 function TxtInp({val,onChange,ph,type="text",onKeyDown}){return<div style={{display:"flex",alignItems:"center",background:"#F2F4F6",borderRadius:12,padding:"0 16px"}}><input value={val||""} onChange={e=>onChange&&onChange(e.target.value)} placeholder={ph} type={type} onKeyDown={onKeyDown} style={{flex:1,border:"none",outline:"none",padding:"16px 0",fontSize:15,color:C.txt,fontFamily:C.fn,background:"transparent"}}/></div>;}
 function DropSel({val,onChange,children,ph}){return<div style={{position:"relative",background:"#F2F4F6",borderRadius:12}}><select value={val||""} onChange={e=>onChange(e.target.value)} style={{width:"100%",border:"none",outline:"none",padding:"16px 36px 16px 16px",fontSize:15,color:val?C.txt:C.sub,fontFamily:C.fn,background:"transparent",WebkitAppearance:"none",cursor:"pointer"}}>{ph&&<option value="">{ph}</option>}{children}</select><span style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",color:C.sub,pointerEvents:"none",fontSize:12}}>▼</span></div>;}
@@ -208,6 +208,7 @@ function AuthPage({onLogin}){
   );
 }
 
+// ── 완벽하게 수정된 대시보드 ──────────────────────────────────────
 function DashPage({orders,products,onNav}){
   const td=today(),vs=new Date();vs.setDate(vs.getDate()-1);const yd=vs.toISOString().slice(0,10);
   const tO=orders.filter(o=>o.date===td);
@@ -219,43 +220,43 @@ function DashPage({orders,products,onNav}){
     <div style={{padding:"24px 20px 100px"}}>
       <div style={{fontWeight:900,fontSize:24,marginBottom:24}}>대시보드</div>
 
-      {/* 상단 통계 카드 (안전한 Flexbox 방식) */}
+      {/* 🚀 상단 통계 카드 (절대 깨지지 않는 Flexbox 방식) */}
       <div style={{display:"flex", gap:12, marginBottom:24}}>
-        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 12px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
-          <div style={{color:C.acc, fontSize:22, fontWeight:900}}>{tO.length}건</div>
-          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>오늘 발주</div>
+        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 10px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
+          <div style={{color:C.acc, fontSize:20, fontWeight:900}}>{tO.length}건</div>
+          <div style={{color:C.sub, fontSize:12, marginTop:8, fontWeight:700}}>오늘 발주</div>
         </div>
-        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 12px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
-          <div style={{color:C.red, fontSize:22, fontWeight:900}}>{delayed.length}건</div>
-          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>미출고</div>
+        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 10px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
+          <div style={{color:C.red, fontSize:20, fontWeight:900}}>{delayed.length}건</div>
+          <div style={{color:C.sub, fontSize:12, marginTop:8, fontWeight:700}}>미출고</div>
         </div>
-        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 12px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
-          <div style={{color:C.txt, fontSize:22, fontWeight:900}}>{fmtN(mQ)}매</div>
-          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>이달 발주</div>
+        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 10px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
+          <div style={{color:C.txt, fontSize:20, fontWeight:900}}>{fmtN(mQ)}매</div>
+          <div style={{color:C.sub, fontSize:12, marginTop:8, fontWeight:700}}>이달 발주</div>
         </div>
       </div>
 
-      {/* 지연 목록 카드 (안전한 Flexbox 방식) */}
+      {/* 🚀 지연 목록 카드 (레이아웃 정렬 완벽 보완) */}
       <Card st={{marginBottom:24}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <span style={{fontWeight:800,fontSize:16,display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:18, color:C.warn}}>⚠️</span> 지연 {delayed.length}건
-          </span>
-          {delayed.length>0&&<button onClick={()=>onNav("list")} style={{background:"none",border:"none",fontSize:13,color:C.sub,cursor:"pointer",fontWeight:600}}>더보기</button>}
+          <div style={{fontWeight:800,fontSize:16,display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:18}}>⚠️</span> 지연 {delayed.length}건
+          </div>
+          {delayed.length>0&&<button onClick={()=>onNav("list")} style={{background:"none",border:"none",fontSize:13,color:C.sub,cursor:"pointer",fontWeight:700}}>더보기</button>}
         </div>
         {delayed.length===0 ? (
-          <div style={{textAlign:"center",padding:"20px 0",color:C.sub,fontSize:14,fontWeight:600}}>지연된 발주가 없습니다 ✅</div>
+          <div style={{textAlign:"center",padding:"30px 0",color:C.sub,fontSize:14,fontWeight:600}}>지연된 발주가 없습니다 ✅</div>
         ) : (
           delayed.slice(0,5).flatMap(o=>(o.items||[]).map((it,j)=>{
             const p=products.find(x=>x.id===it.pid);
             return(
               <div key={`${o.id}-${j}`} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 0", borderBottom:`1px solid ${C.bdr}`}}>
-                <div style={{flex:1, minWidth:0, paddingRight:8}}>
-                  <div style={{fontWeight:800, fontSize:15, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p?.name||"-"}</div>
+                <div style={{flex:1, minWidth:0, paddingRight:12}}>
+                  <div style={{fontWeight:800, fontSize:15, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", color:C.txt}}>{p?.name||"-"}</div>
                   <div style={{color:C.sub, fontSize:13, marginTop:4, fontWeight:600}}>{it.color}</div>
                 </div>
                 <div style={{display:"flex", alignItems:"center", gap:12, flexShrink:0}}>
-                  <div style={{fontWeight:900, fontSize:16, color:C.acc}}>{fmtN(it.qty)}<span style={{fontSize:13, fontWeight:600, color:C.txt, marginLeft:2}}>장</span></div>
+                  <div style={{fontWeight:900, fontSize:16, color:C.txt}}>{fmtN(it.qty)}<span style={{fontSize:13, fontWeight:600, color:C.sub, marginLeft:2}}>장</span></div>
                   <Tag ch="지연" c="#FFF0F1" tc={C.red}/>
                 </div>
               </div>
@@ -275,7 +276,6 @@ function DashPage({orders,products,onNav}){
     </div>
   );
 }
-
 function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [step,setStep]=useState(1);
   const [items,setItems]=useState([]);
@@ -495,6 +495,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     </div>
   );
 }
+
 function ProdsPage({products,setProducts,vendors,factories,user}){
   const [catF,setCatF]=useState("전체");
   const [prodSearch,setProdSearch]=useState("");
