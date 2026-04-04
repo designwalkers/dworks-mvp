@@ -28,18 +28,18 @@ const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","�
 const getCho=s=>(s||"").split("").map(c=>{const cd=c.charCodeAt(0);return(cd>=44032&&cd<=55203)?CHO[Math.floor((cd-44032)/588)]:c;}).join("");
 const match=(t,q)=>{if(!q)return true;const txt=(t||"").toLowerCase(),qry=(q||"").toLowerCase();return txt.includes(qry)||getCho(txt).includes(getCho(qry));};
 
-// ── 상수 (디자인 시스템 전면 개편) ─────────────────────────────
+// ── 상수 (디자인 시스템) ─────────────────────────────────────────
 const C={
-  bg:"#F4F6FA",      // 연한 회색 바탕
-  card:"#FFFFFF",    // 카드 흰색
-  bdr:"#EAECEF",     // 부드러운 테두리 선
-  acc:"#3772FF",     // 메인 블루
-  txt:"#191F28",     // 진한 텍스트
-  sub:"#8B95A1",     // 연한 텍스트
+  bg:"#F4F6FA",
+  card:"#FFFFFF",
+  bdr:"#EAECEF",
+  acc:"#3772FF",
+  txt:"#191F28",
+  sub:"#8B95A1",
   sub2:"#6B7280",
-  ok:"#2DCA72",      // 초록색
+  ok:"#2DCA72",
   warn:"#FF9E1B",
-  red:"#F04452",     // 빨간색
+  red:"#F04452",
   fn:"'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif"
 };
 const uid=()=>Math.random().toString(36).slice(2,9);
@@ -54,7 +54,7 @@ const SEASONS=["26SS","26FW","25SS","25FW"];
 const MAT_TYPES=["메인원단","부속원단","단추","지퍼","안감","심지","기타"];
 const BIZ_TYPES=["다이마루","직기","니트","데님","기타"];
 
-// ── 공통 UI (스타일 보정) ──────────────────────────────────────
+// ── 공통 UI ───────────────────────────────────────────────────
 const Btn=({ch,onClick,v="p",full,disabled,sz="m",st={}})=>{
   const bg={p:C.acc,w:"#fff",ok:C.ok,d:"#F2F4F6"}[v]||C.acc;
   const cl={p:"#fff",w:C.txt,ok:"#fff",d:C.sub}[v]||"#fff";
@@ -65,11 +65,11 @@ function FCard({children,mb=16}){return<div style={{background:"#fff",borderRadi
 function FRow({label,children,last,req}){return<div style={{display:"flex",alignItems:"center",minHeight:56,padding:"0 20px",borderBottom:last?"none":`1px solid ${C.bdr}`,position:"relative"}}><div style={{width:90,fontSize:14,fontWeight:600,color:C.txt,flexShrink:0}}>{label}{req&&<span style={{color:C.acc,marginLeft:2}}>*</span>}</div><div style={{flex:1,display:"flex",alignItems:"center",minWidth:0}}>{children}</div></div>;}
 const FInp=({val,onChange,ph,type="text"})=><input value={val||""} onChange={e=>onChange&&onChange(e.target.value)} placeholder={ph} type={type} style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:14,color:C.txt,fontFamily:C.fn,padding:"0",minWidth:0,textAlign:"right"}}/>;
 const FSel=({val,onChange,children,ph})=><select value={val||""} onChange={e=>onChange(e.target.value)} style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:14,color:val?C.txt:C.sub,fontFamily:C.fn,textAlign:"right",WebkitAppearance:"none",cursor:"pointer"}}>{ph&&<option value="">{ph}</option>}{children}</select>;
-const Tag=({ch,c=C.acc})=><span style={{background:c+"15",color:c,padding:"4px 10px",borderRadius:8,fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>{ch}</span>;
+const Tag=({ch,c=C.acc,tc="#fff"})=><span style={{background:c,color:tc,padding:"4px 8px",borderRadius:6,fontSize:11,fontWeight:800,whiteSpace:"nowrap"}}>{ch}</span>;
 const Card=({children,st={},onClick})=><div onClick={onClick} style={{background:"#fff",borderRadius:16,border:`1px solid ${C.bdr}`,padding:20,boxSizing:"border-box",boxShadow:"0 2px 10px rgba(0,0,0,0.02)",cursor:onClick?"pointer":"default",...st}}>{children}</div>;
 const Divider=()=><div style={{height:1,background:C.bdr,margin:"16px 0"}}/>;
 const G=({h=16})=><div style={{height:h}}/>;
-const Empty=({icon,text})=><div style={{textAlign:"center",padding:"60px 20px",color:C.sub,background:"#fff",borderRadius:16,border:`1px solid ${C.bdr}`}}><div style={{fontSize:40,marginBottom:12}}>{icon}</div><div style={{fontSize:15,fontWeight:600,color:C.sub}}>{text}</div></div>;
+const Empty=({icon,text})=><div style={{textAlign:"center",padding:"50px 20px",color:C.sub,background:"#fff",borderRadius:16,border:`1px solid ${C.bdr}`}}><div style={{fontSize:40,marginBottom:12}}>{icon}</div><div style={{fontSize:15,fontWeight:600,color:C.sub}}>{text}</div></div>;
 function Field({label,children,req}){return<div style={{marginBottom:20}}><div style={{fontSize:14,fontWeight:700,color:C.txt,marginBottom:10}}>{label}{req&&<span style={{color:C.acc,marginLeft:4}}>*</span>}</div>{children}</div>;}
 function TxtInp({val,onChange,ph,type="text",onKeyDown}){return<div style={{display:"flex",alignItems:"center",background:"#F2F4F6",borderRadius:12,padding:"0 16px"}}><input value={val||""} onChange={e=>onChange&&onChange(e.target.value)} placeholder={ph} type={type} onKeyDown={onKeyDown} style={{flex:1,border:"none",outline:"none",padding:"16px 0",fontSize:15,color:C.txt,fontFamily:C.fn,background:"transparent"}}/></div>;}
 function DropSel({val,onChange,children,ph}){return<div style={{position:"relative",background:"#F2F4F6",borderRadius:12}}><select value={val||""} onChange={e=>onChange(e.target.value)} style={{width:"100%",border:"none",outline:"none",padding:"16px 36px 16px 16px",fontSize:15,color:val?C.txt:C.sub,fontFamily:C.fn,background:"transparent",WebkitAppearance:"none",cursor:"pointer"}}>{ph&&<option value="">{ph}</option>}{children}</select><span style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",color:C.sub,pointerEvents:"none",fontSize:12}}>▼</span></div>;}
@@ -217,58 +217,50 @@ function DashPage({orders,products,onNav}){
   
   return(
     <div style={{padding:"24px 20px 100px"}}>
-      <div style={{fontWeight:900,fontSize:22,marginBottom:20,textAlign:"center"}}>대시 보드</div>
+      <div style={{fontWeight:900,fontSize:24,marginBottom:24}}>대시보드</div>
 
-      {/* 상단 통계 카드 (절대 깨지지 않는 Flexbox 방식) */}
-      <div style={{display:"flex", background:"#fff", borderRadius:16, border:`1px solid ${C.bdr}`, padding:"20px 0", marginBottom:24, boxShadow:"0 2px 8px rgba(0,0,0,0.02)"}}>
-        <div style={{flex:1, textAlign:"center", borderRight:`1px solid ${C.bdr}`}}>
+      {/* 상단 통계 카드 (안전한 Flexbox 방식) */}
+      <div style={{display:"flex", gap:12, marginBottom:24}}>
+        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 12px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
           <div style={{color:C.acc, fontSize:22, fontWeight:900}}>{tO.length}건</div>
           <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>오늘 발주</div>
         </div>
-        <div style={{flex:1, textAlign:"center", borderRight:`1px solid ${C.bdr}`}}>
-          <div style={{color:"#FA5252", fontSize:22, fontWeight:900}}>{delayed.length}건</div>
-          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>미출고 발주</div>
+        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 12px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
+          <div style={{color:C.red, fontSize:22, fontWeight:900}}>{delayed.length}건</div>
+          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>미출고</div>
         </div>
-        <div style={{flex:1, textAlign:"center"}}>
-          <div style={{color:C.ok, fontSize:22, fontWeight:900}}>{fmtN(mQ)}매</div>
-          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>이달 발주량</div>
+        <div style={{flex:1, background:C.card, borderRadius:16, padding:"20px 12px", textAlign:"center", border:`1px solid ${C.bdr}`, boxShadow:"0 2px 10px rgba(0,0,0,0.02)"}}>
+          <div style={{color:C.txt, fontSize:22, fontWeight:900}}>{fmtN(mQ)}매</div>
+          <div style={{color:C.sub, fontSize:12, marginTop:6, fontWeight:600}}>이달 발주</div>
         </div>
       </div>
 
-      {/* 지연 목록 카드 (간격과 정렬 완벽하게 수정) */}
-      <Card st={{marginBottom:24, padding:"20px"}}>
+      {/* 지연 목록 카드 (안전한 Flexbox 방식) */}
+      <Card st={{marginBottom:24}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <span style={{fontWeight:800,fontSize:16,display:"flex",alignItems:"center",gap:6}}>
-            <span style={{fontSize:16}}>⚠️</span> 지연 {delayed.length}건
+            <span style={{fontSize:18, color:C.warn}}>⚠️</span> 지연 {delayed.length}건
           </span>
-          {delayed.length>3&&<button onClick={()=>onNav("list")} style={{background:"none",border:"none",fontSize:13,color:C.sub,cursor:"pointer",fontWeight:600}}>더보기</button>}
+          {delayed.length>0&&<button onClick={()=>onNav("list")} style={{background:"none",border:"none",fontSize:13,color:C.sub,cursor:"pointer",fontWeight:600}}>더보기</button>}
         </div>
         {delayed.length===0 ? (
           <div style={{textAlign:"center",padding:"20px 0",color:C.sub,fontSize:14,fontWeight:600}}>지연된 발주가 없습니다 ✅</div>
         ) : (
-          <>
-            {/* 테이블 헤더 */}
-            <div style={{display:"flex", fontSize:12, fontWeight:700, color:C.sub, paddingBottom:8, borderBottom:`1px solid ${C.bdr}`, marginBottom:8}}>
-              <div style={{flex:2}}>상품명</div>
-              <div style={{flex:1, textAlign:"center"}}>색상</div>
-              <div style={{flex:1, textAlign:"right"}}>수량</div>
-              <div style={{width:55, textAlign:"center", marginLeft:8}}>상태</div>
-            </div>
-            {/* 테이블 리스트 */}
-            {delayed.slice(0,5).flatMap(o=>(o.items||[]).map((it,j)=>{
-              const p=products.find(x=>x.id===it.pid);
-              return(
-                <div key={`${o.id}-${j}`} style={{display:"flex", fontSize:14, padding:"12px 0", borderBottom:`1px solid ${C.bdr}`, alignItems:"center"}}>
-                  <div style={{flex:2, fontWeight:800, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p?.name||"-"}</div>
-                  <div style={{flex:1, color:C.sub, textAlign:"center", fontSize:13}}>{it.color}</div>
-                  <div style={{flex:1, fontWeight:800, textAlign:"right", color:C.acc}}>{fmtN(it.qty)}</div>
-                  <div style={{width:55, display:"flex", justifyContent:"center", marginLeft:8}}>
-                    <span style={{background:"#FFF0F1", color:"#FA5252", padding:"4px 8px", borderRadius:6, fontSize:11, fontWeight:800}}>지연</span>
-                  </div>
+          delayed.slice(0,5).flatMap(o=>(o.items||[]).map((it,j)=>{
+            const p=products.find(x=>x.id===it.pid);
+            return(
+              <div key={`${o.id}-${j}`} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"14px 0", borderBottom:`1px solid ${C.bdr}`}}>
+                <div style={{flex:1, minWidth:0, paddingRight:8}}>
+                  <div style={{fontWeight:800, fontSize:15, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{p?.name||"-"}</div>
+                  <div style={{color:C.sub, fontSize:13, marginTop:4, fontWeight:600}}>{it.color}</div>
                 </div>
-              );
-            }))}
-          </>
+                <div style={{display:"flex", alignItems:"center", gap:12, flexShrink:0}}>
+                  <div style={{fontWeight:900, fontSize:16, color:C.acc}}>{fmtN(it.qty)}<span style={{fontSize:13, fontWeight:600, color:C.txt, marginLeft:2}}>장</span></div>
+                  <Tag ch="지연" c="#FFF0F1" tc={C.red}/>
+                </div>
+              </div>
+            );
+          }))
         )}
       </Card>
 
@@ -463,8 +455,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
           <Btn ch="임시저장" v="d" st={{flex:1}} onClick={()=>{if(!items.length){alert("저장할 항목이 없습니다");return;}try{localStorage.setItem(DRAFT,JSON.stringify({items}));alert(`✅ 임시저장 완료!`);}catch{}}}/>
           <Btn ch="다음" st={{flex:2}} onClick={()=>items.length?setStep(2):alert("항목 추가 필요")} disabled={!items.length}/>
         </div>
-      </>
-    }
+      </>}
       {step===2&&<>
         <Card st={{marginBottom:24}}>
           <div style={{fontWeight:800,fontSize:16,marginBottom:16}}>📋 발주 내역 요약</div>
@@ -974,6 +965,7 @@ export default function App(){
       }
       setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||""})):[]);
+      // 🚀 이미지 URL 매핑
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{},bom:x.bom||[], imageUrl:x.image_url||""})):[]);
       setOrders(Array.isArray(o)?o:[]);
     }catch(e){
