@@ -215,8 +215,7 @@ function DashPage({orders,products,onNav}){
       <Card st={{background:"linear-gradient(135deg,#101828 0%, #0F172A 50%, #172554 100%)",border:"none",color:"#fff",padding:20,marginBottom:16,boxShadow:"0 18px 40px rgba(15,23,42,0.18)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14}}>
           <div style={{flex:1}}>
-            <div style={{display:"inline-flex",alignItems:"center",padding:"7px 12px",borderRadius:999,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.06)",fontSize:11,fontWeight:800,color:"rgba(255,255,255,0.86)",marginBottom:14}}>Visual redesign direction</div>
-            <div style={{fontWeight:900,fontSize:19,lineHeight:1.28,letterSpacing:"-0.02em"}}>익숙한 구조는 유지하고<br/>화면 밀도와 리듬만 바꿉니다</div>
+            <div style={{fontWeight:900,fontSize:20,lineHeight:1.3,letterSpacing:"-0.03em",maxWidth:220}}>복잡한 발주를 더 빠르고 정확하게</div>
           </div>
           <div style={{minWidth:92,padding:"12px 14px",borderRadius:22,border:"1px solid rgba(255,255,255,0.12)",background:"rgba(255,255,255,0.08)",textAlign:"right",backdropFilter:"blur(12px)"}}>
             <div style={{fontSize:11,color:"rgba(255,255,255,0.68)",fontWeight:700}}>오늘 기준</div>
