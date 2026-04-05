@@ -231,25 +231,6 @@ function DashPage({orders,products,onNav}){
         </div>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-        <Card st={{padding:18,marginBottom:0,borderRadius:24,boxShadow:"0 12px 30px rgba(15,23,42,0.05)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <span style={{fontSize:12,fontWeight:800,color:C.sub2}}>오늘 발주</span>
-            <div style={{width:40,height:40,borderRadius:16,background:"#F1F5F9",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>📦</div>
-          </div>
-          <div style={{fontSize:30,fontWeight:900,color:C.txt,letterSpacing:"-0.04em"}}>{tO.length}건</div>
-          <div style={{marginTop:8,fontSize:12,fontWeight:700,color:diff>=0?C.ok:C.warn}}>{diff>=0?`전일 대비 +${fmtN(diff)}매`:`전일 대비 ${fmtN(diff)}매`}</div>
-        </Card>
-        <Card st={{padding:18,marginBottom:0,borderRadius:24,boxShadow:"0 12px 30px rgba(15,23,42,0.05)"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <span style={{fontSize:12,fontWeight:800,color:C.sub2}}>미출고 발주</span>
-            <div style={{width:40,height:40,borderRadius:16,background:"#FFF7ED",display:"flex",alignItems:"center",justifyContent:"center",fontSize:17}}>⏳</div>
-          </div>
-          <div style={{fontSize:30,fontWeight:900,color:C.txt,letterSpacing:"-0.04em"}}>{delayed.length}건</div>
-          <div style={{marginTop:8,fontSize:12,fontWeight:700,color:delayed.length?C.warn:C.ok}}>{delayed.length?"빠른 확인 필요":"안정적으로 관리 중"}</div>
-        </Card>
-      </div>
-
       <Card st={{marginBottom:12,borderRadius:26,padding:18}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div>
@@ -886,22 +867,13 @@ export default function App(){
   return(
     <div style={{minHeight:"100vh",background:`linear-gradient(180deg, #F8FAFC 0%, #EEF2FF 100%)`,fontFamily:C.fn,padding:"0",position:"relative"}}>
       <div style={{maxWidth:410,margin:"0 auto",minHeight:"100vh",position:"relative",background:`linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%)`,boxShadow:"0 28px 90px rgba(15,23,42,0.14)",overflow:"hidden"}}>
-        <div style={{background:"rgba(255,255,255,0.88)",backdropFilter:"blur(16px)",padding:"16px 16px 12px",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div style={{background:"rgba(255,255,255,0.88)",backdropFilter:"blur(16px)",padding:"16px 16px 14px",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div>
               <div style={{fontSize:10,fontWeight:800,color:C.sub,letterSpacing:"0.24em",textTransform:"uppercase",marginBottom:4}}>Design workers</div>
               <button onClick={()=>setPage("dash")} style={{background:"none",border:"none",color:C.txt,fontWeight:900,fontSize:22,cursor:"pointer",fontFamily:C.fn,letterSpacing:"-0.03em",padding:0}}>D-Works</button>
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <button style={{width:38,height:38,borderRadius:16,background:"#fff",border:`1px solid ${C.bdr}`,boxShadow:"0 8px 20px rgba(15,23,42,0.05)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:C.sub2}}>◌</button>
-              <div style={{width:38,height:38,borderRadius:16,background:C.txt,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:900,boxShadow:"0 8px 20px rgba(15,23,42,0.18)"}}>{(user.name||'U').slice(0,1)}</div>
-            </div>
-          </div>
-          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
-            {[{k:"dash",l:"대시보드"},...TABS].map(t=>{
-              const active=page===t.k;
-              return <button key={t.k} onClick={()=>setPage(t.k)} style={{flexShrink:0,padding:"8px 12px",borderRadius:16,border:"none",background:active?C.txt:"#F1F5F9",color:active?"#fff":C.sub2,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:C.fn,boxShadow:active?"0 8px 18px rgba(15,23,42,0.12)":"none"}}>{t.l}</button>;
-            })}
+            <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",minHeight:38,padding:"0 14px",borderRadius:16,background:"#fff",border:`1px solid ${C.bdr}`,boxShadow:"0 8px 20px rgba(15,23,42,0.05)",fontSize:12,fontWeight:900,color:C.sub2,letterSpacing:"0.02em"}}>{user.brand||user.company||user.name||"WORKSPACE"}</div>
           </div>
         </div>
         <div style={{paddingBottom:114}}>{pages[page]||pages["dash"]}</div>
