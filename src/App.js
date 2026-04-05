@@ -558,276 +558,123 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 
 // 🚀 발주 리스트 🚀
 function ListPage({orders,setOrders,products,user,onNav}){
+  const [boxFilter,setBoxFilter]=useState("진행중");
   const [filter,setFilter]=useState("전체");
   const [dateFilter,setDateFilter]=useState("전체");
   const [startDate,setStartDate]=useState("");
   const [endDate,setEndDate]=useState("");
-  const [selected,setSelected]=useState(null);
-  const [groupOpen,setGroupOpen]=useState({오늘:true,어제:true,"최근 7일":true,이전:false});
+  const [open,setOpen]=useState(null);
+  const [archivedIds,setArchivedIds]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem("dworks_archived_orders_v1")||"[]");}catch{return [];}
+  });
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
 
-  const getPastDate=(days)=>{const d=new Date();d.setDate(d.getDate()-days);return d.toISOString().slice(0,10);};
-  const tToday=today(), tYest=getPastDate(1), tWeek=getPastDate(7);
+  function saveArchived(next){
+    setArchivedIds(next);
+    try{localStorage.setItem("dworks_archived_orders_v1",JSON.stringify(next));}catch{}
+  }
+  function isArchived(id){ return archivedIds.includes(id); }
 
-  let dateFiltered=orders;
-  if(dateFilter==="오늘") dateFiltered=orders.filter(o=>o.date===tToday);
-  else if(dateFilter==="어제") dateFiltered=orders.filter(o=>o.date===tYest);
-  else if(dateFilter==="1주일") dateFiltered=orders.filter(o=>o.date>=tWeek&&o.date<=tToday);
-  else if(dateFilter==="기간설정"){
-    dateFiltered=orders.filter(o=>{
-      if(startDate&&endDate) return o.date>=startDate&&o.date<=endDate;
-      if(startDate) return o.date>=startDate;
-      if(endDate) return o.date<=endDate;
+  const getPastDate = (days) => {
+    const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0,10);
+  };
+  const tToday = today(), tYest = getPastDate(1), tWeek = getPastDate(7);
+
+  let dateFiltered = orders;
+  if (dateFilter === "오늘") dateFiltered = orders.filter(o => o.date === tToday);
+  else if (dateFilter === "어제") dateFiltered = orders.filter(o => o.date === tYest);
+  else if (dateFilter === "1주일") dateFiltered = orders.filter(o => o.date >= tWeek && o.date <= tToday);
+  else if (dateFilter === "기간설정") {
+    dateFiltered = orders.filter(o => {
+      if(startDate && endDate) return o.date >= startDate && o.date <= endDate;
+      if(startDate) return o.date >= startDate;
+      if(endDate) return o.date <= endDate;
       return true;
     });
   }
 
-  const filtered=(filter==="전체"?dateFiltered:dateFiltered.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
+  let base = dateFiltered.filter(o => {
+    const archived = isArchived(o.id);
+    if(boxFilter === "보관함") return archived;
+    if(archived) return false;
+    if(boxFilter === "완료") return o.status === "완료";
+    return o.status !== "완료";
+  });
 
-  function bucketOf(date){
-    if(date===tToday) return "오늘";
-    if(date===tYest) return "어제";
-    if(date>=tWeek&&date<tYest) return "최근 7일";
-    return "이전";
-  }
-
-  const grouped={오늘:[],어제:[],"최근 7일":[],이전:[]};
-  filtered.forEach(o=>{grouped[bucketOf(o.date)].push(o);});
-  const groupOrder=["오늘","어제","최근 7일","이전"];
+  const statusTabs = boxFilter === "진행중" ? ["전체","진행중","지연"] : boxFilter === "완료" ? ["전체","완료"] : ["전체","진행중","완료","지연"];
+  const filtered=(filter==="전체"?base:base.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
 
   async function changeStatus(id,status){
-    if(user?.token) try{await DB.update(user.token,"orders",id,{status});}catch{}
+    if(user?.token)try{await DB.update(user.token,"orders",id,{status});}catch{}
     setOrders(p=>p.map(x=>x.id===id?{...x,status}:x));
-    setSelected(s=>s&&s.id===id?{...s,status}:s);
+    if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null);
   }
-  async function delOrder(id){
-    if(!window.confirm("삭제?")) return;
-    if(user?.token) try{await DB.del(user.token,"orders",id);}catch{}
-    setOrders(p=>p.filter(x=>x.id!==id));
-    setSelected(s=>s&&s.id===id?null:s);
+  function archiveOrder(id){
+    if(!window.confirm("목록에서 보관하시겠습니까? 데이터는 삭제되지 않습니다.")) return;
+    if(isArchived(id)) return;
+    saveArchived([...archivedIds,id]);
+    if(open===id) setOpen(null);
   }
-  function handleReorder(o){
-    if(!window.confirm("새 발주를 진행하시겠습니까?")) return;
-    try{
-      localStorage.setItem("dworks_draft",JSON.stringify({items:o.items}));
-      onNav("order");
-    }catch{}
+  function unarchiveOrder(id){
+    saveArchived(archivedIds.filter(x=>x!==id));
+    if(open===id) setOpen(null);
   }
+  function handleReorder(o){ if(!window.confirm("새 발주를 진행하시겠습니까?")) return; try{localStorage.setItem("dworks_draft",JSON.stringify({items:o.items})); onNav("order");}catch{} }
 
-  function getOrderSummary(o){
-    const names=Array.from(new Set((o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-")));
-    const title=names.length>1?`${names[0]} 외 ${names.length-1}건`:names[0]||"-";
-    const totalQty=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);
-    return {title,totalQty,itemCount:(o.items||[]).length,names};
-  }
-
-  const selectedSummary=selected?getOrderSummary(selected):null;
+  const boxCounts = {
+    진행중: dateFiltered.filter(o=>!isArchived(o.id) && o.status !== "완료").length,
+    완료: dateFiltered.filter(o=>!isArchived(o.id) && o.status === "완료").length,
+    보관함: dateFiltered.filter(o=>isArchived(o.id)).length,
+  };
 
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div>
-        <Tag ch={`${filtered.length}건`} c={C.sub}/>
+        <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div><Tag ch={`${filtered.length}건`} c={C.sub}/>
+      </div>
+
+      <div style={{display:"flex",gap:7,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+        {["진행중","완료","보관함"].map(s=><button key={s} onClick={()=>{setBoxFilter(s);setFilter("전체");setOpen(null);}} style={{padding:"8px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${boxFilter===s?C.acc:C.bdr}`,background:boxFilter===s?C.acc+"18":"#fff",color:boxFilter===s?C.acc:C.sub2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{s}<span style={{fontSize:11,opacity:.9}}>{boxCounts[s]}</span></button>)}
       </div>
 
       <div style={{display:"flex",gap:7,marginBottom:dateFilter==="기간설정"?8:12,overflowX:"auto",paddingBottom:4}}>
-        {["전체","오늘","어제","1주일","기간설정"].map(d=>
-          <button
-            key={d}
-            onClick={()=>setDateFilter(d)}
-            style={{
-              padding:"6px 14px",
-              borderRadius:20,
-              flexShrink:0,
-              border:`1.5px solid ${dateFilter===d?C.acc:C.bdr}`,
-              background:dateFilter===d?C.acc+"18":"#fff",
-              color:dateFilter===d?C.acc:C.sub2,
-              fontWeight:600,
-              fontSize:12,
-              cursor:"pointer",
-              fontFamily:C.fn
-            }}
-          >
-            {d}
-          </button>
-        )}
+        {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>setDateFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
       </div>
+      {dateFilter==="기간설정"&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/><span style={{color:C.sub}}>-</span><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/></div>}
 
-      {dateFilter==="기간설정"&&
-        <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
-          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/>
-          <span style={{color:C.sub}}>-</span>
-          <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/>
-        </div>
-      }
+      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{statusTabs.map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}</div>
 
-      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>
-        {["전체","진행중","완료","지연"].map(s=>
-          <button
-            key={s}
-            onClick={()=>setFilter(s)}
-            style={{
-              padding:"6px 14px",
-              borderRadius:20,
-              flexShrink:0,
-              border:`1.5px solid ${filter===s?C.acc:C.bdr}`,
-              background:filter===s?C.acc+"18":"#fff",
-              color:filter===s?C.acc:C.sub2,
-              fontWeight:600,
-              fontSize:12,
-              cursor:"pointer",
-              fontFamily:C.fn
-            }}
-          >
-            {s}
-          </button>
-        )}
-      </div>
-
-      {filtered.length===0 ? <Empty icon="📋" text="발주 내역이 없습니다"/> : (
-        <div>
-          {groupOrder.map(groupName=>{
-            const list=grouped[groupName];
-            if(list.length===0) return null;
-            const opened=groupOpen[groupName];
-            return (
-              <div key={groupName} style={{marginBottom:10}}>
-                <button
-                  onClick={()=>setGroupOpen(p=>({...p,[groupName]:!p[groupName]}))}
-                  style={{
-                    width:"100%",
-                    background:"#fff",
-                    border:`1px solid ${C.bdr}`,
-                    borderRadius:12,
-                    padding:"12px 14px",
-                    cursor:"pointer",
-                    display:"flex",
-                    alignItems:"center",
-                    justifyContent:"space-between",
-                    fontFamily:C.fn
-                  }}
-                >
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontWeight:800,fontSize:13,color:C.txt}}>{groupName}</span>
-                    <span style={{fontSize:11,color:C.sub,fontWeight:700}}>{list.length}건</span>
-                  </div>
-                  <span style={{fontSize:12,color:C.sub}}>{opened?"▲":"▼"}</span>
-                </button>
-
-                {opened && (
-                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:8}}>
-                    {list.map(o=>{
-                      const summary=getOrderSummary(o);
-                      return (
-                        <div
-                          key={o.id}
-                          onClick={()=>setSelected(o)}
-                          style={{
-                            background:"#fff",
-                            border:`1px solid ${C.bdr}`,
-                            borderRadius:12,
-                            padding:"13px 14px",
-                            cursor:"pointer"
-                          }}
-                        >
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
-                            <div style={{flex:1,minWidth:0}}>
-                              <div style={{fontWeight:800,fontSize:13,color:C.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                                {summary.title}
-                              </div>
-                              <div style={{marginTop:5,color:C.sub,fontSize:11,lineHeight:1.45}}>
-                                {o.date} · 총 {fmtN(summary.totalQty)}장 · 품목 {summary.itemCount}개
-                              </div>
-                            </div>
-                            <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
-                              <Tag ch={o.status} c={SC[o.status]||C.sub}/>
-                              <span style={{color:C.sub,fontSize:12}}>›</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {selected &&
-        <Sheet title="발주 상세" onClose={()=>setSelected(null)}>
-          <Card st={{marginBottom:12,padding:14}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontWeight:800,fontSize:15,color:C.txt,lineHeight:1.4}}>
-                  {selectedSummary?.title}
-                </div>
-                <div style={{marginTop:6,fontSize:12,color:C.sub}}>
-                  {selected.date} · 품목 {selectedSummary?.itemCount||0}개
-                </div>
-              </div>
-              <Tag ch={selected.status} c={SC[selected.status]||C.sub}/>
+      {filtered.length===0?<Empty icon="📋" text={boxFilter==="보관함"?"보관된 발주 내역이 없습니다":"조건에 맞는 발주 내역이 없습니다"}/>:filtered.map(o=>{
+        const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);
+        const isO=open===o.id;
+        const title=Array.from(new Set((o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-"))).join(", ");
+        return <Card key={o.id} st={{marginBottom:10,cursor:"pointer"}} onClick={()=>setOpen(isO?null:o.id)}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontWeight:800,fontSize:13,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
+              <div style={{color:C.sub,fontSize:11}}>{o.date} · 총 {fmtN(tot)}장 · 품목 {(o.items||[]).length}개</div>
             </div>
-
-            <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
-              <span style={{background:C.bg,border:`1px solid ${C.bdr}`,borderRadius:20,padding:"5px 10px",fontSize:11,fontWeight:700,color:C.sub2}}>
-                총 수량 {fmtN(selectedSummary?.totalQty||0)}장
-              </span>
-              <span style={{background:C.bg,border:`1px solid ${C.bdr}`,borderRadius:20,padding:"5px 10px",fontSize:11,fontWeight:700,color:C.sub2}}>
-                발주일 {selected.date}
-              </span>
+            <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
+              <Tag ch={o.status} c={SC[o.status]||C.sub}/>
+              <span style={{color:C.sub,fontSize:12}}>{isO?"▲":"›"}</span>
             </div>
-          </Card>
-
-          <Card st={{marginBottom:12,padding:0}}>
-            <div style={{padding:"14px 14px 8px",fontWeight:800,fontSize:13}}>품목 상세</div>
-            {(selected.items||[]).map((it,j)=>{
-              const p=products.find(x=>x.id===it.pid);
-              return (
-                <div key={j} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"11px 14px",borderTop:`1px solid ${C.bdr}`}}>
-                  <div style={{minWidth:0,flex:1,paddingRight:8}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p?.name||"-"}</div>
-                    <div style={{fontSize:11,color:C.sub,marginTop:3}}>{it.color||"-"}</div>
-                  </div>
-                  <div style={{fontSize:13,fontWeight:800,color:C.txt,flexShrink:0}}>{fmtN(it.qty)}장</div>
-                </div>
-              );
-            })}
-          </Card>
-
-          {!!selected.memo &&
-            <Card st={{marginBottom:12,padding:14}}>
-              <div style={{fontWeight:800,fontSize:13,marginBottom:8}}>전달사항</div>
-              <div style={{fontSize:12,color:C.sub2,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{selected.memo}</div>
-            </Card>
-          }
-
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
-            <Btn ch="재발주" sz="s" v="w" st={{padding:"6px 12px",fontSize:12,color:C.acc}} onClick={()=>handleReorder(selected)}/>
-            {["진행중","완료","지연"].map(st=>
-              <Btn
-                key={st}
-                ch={st}
-                sz="s"
-                st={{
-                  padding:"6px 12px",
-                  background:selected.status===st?(SC[st]||C.acc):"#fff",
-                  color:selected.status===st?"#fff":(SC[st]||C.sub2),
-                  border:`1.5px solid ${SC[st]||C.bdr}`,
-                  fontSize:12
-                }}
-                onClick={()=>changeStatus(selected.id,st)}
-              />
-            )}
           </div>
 
-          <div style={{display:"flex",gap:10}}>
-            <Btn ch="닫기" v="w" full st={{flex:1}} onClick={()=>setSelected(null)}/>
-            <Btn ch="삭제" v="w" full st={{flex:1,color:C.red}} onClick={()=>delOrder(selected.id)}/>
-          </div>
-        </Sheet>
-      }
+          {isO&&<div onClick={e=>e.stopPropagation()}>
+            <Divider/>
+            {(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:j<(o.items||[]).length-1?`1px solid ${C.bdr}`:"none",fontSize:12,gap:8}}><span style={{fontWeight:600,flex:1}}>{p?.name}</span><span style={{whiteSpace:"nowrap"}}>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}
+            <div style={{display:"flex",gap:7,marginTop:10,flexWrap:"wrap"}}>
+              <Btn ch="🔄 재발주" sz="s" v="w" st={{padding:"5px 11px",fontSize:12,color:C.acc}} onClick={(e)=>{e.stopPropagation();handleReorder(o);}}/>
+              {boxFilter!=="보관함" && ["진행중","완료","지연"].map(st=><Btn key={st} ch={st} sz="s" st={{padding:"5px 11px",background:o.status===st?(SC[st]||C.acc):"#fff",color:o.status===st?"#fff":(SC[st]||C.sub2),border:`1.5px solid ${SC[st]||C.bdr}`,fontSize:12}} onClick={()=>changeStatus(o.id,st)}/>) }
+              {boxFilter!=="보관함"
+                ? <Btn ch="보관" sz="s" v="w" st={{marginLeft:"auto",color:C.warn,fontSize:12,padding:"5px 11px"}} onClick={()=>archiveOrder(o.id)}/>
+                : <Btn ch="보관 해제" sz="s" v="w" st={{marginLeft:"auto",color:C.acc,fontSize:12,padding:"5px 11px"}} onClick={()=>unarchiveOrder(o.id)}/>
+              }
+            </div>
+            {boxFilter!=="보관함" && <div style={{marginTop:8,fontSize:11,color:C.sub}}>보관하면 목록에서만 숨겨지고 데이터는 유지됩니다.</div>}
+          </div>}
+        </Card>;
+      })}
     </div>
   );
 }
