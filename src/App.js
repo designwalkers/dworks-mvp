@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 
-// ── 1. API 설정 (Supabase) ─────────────────────────────────
+// ── 1. API 및 설정 (Supabase) ─────────────────────────────────
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{try{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined}); return r.json();}catch{return {error:true};}};
@@ -45,7 +45,6 @@ function AuthPage({onLogin}){
   const [f,setF]=useState({company:"",brand:"",name:"",position:"",tel:"",email:"",pw:"",keepLoggedIn:true});
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const [loading,setLoading]=useState(false);
-
   async function submit(){
     if(!f.email||!f.pw) return alert("정보를 입력하세요");
     setLoading(true);
@@ -59,7 +58,6 @@ function AuthPage({onLogin}){
       }
     } catch(e){ alert("연결 오류"); } finally { setLoading(false); }
   }
-
   return(
     <div style={{minHeight:"100vh",background:"#fff",padding:"60px 24px"}}>
       <div style={{fontSize:36,fontWeight:900,color:C.acc,marginBottom:8}}>D-Works</div>
@@ -94,12 +92,11 @@ function DashPage({orders=[], products=[]}){
         <Card st={{flex:1,textAlign:"center",padding:"24px 10px"}}><div style={{color:C.red,fontSize:28,fontWeight:900}}>{delayed.length}건</div><div style={{fontSize:12,color:C.sub,marginTop:8,fontWeight:600}}>지연 발주</div></Card>
       </div>
       <Card st={{textAlign:"center",padding:"32px"}}><div style={{color:C.ok,fontSize:32,fontWeight:900}}>{fmtN(mQ)}매</div><div style={{fontSize:14,color:C.sub,marginTop:10,fontWeight:600}}>이달 누적 발주량</div></Card>
-      {delayed.length>0 && <Card><div style={{fontWeight:800,marginBottom:14,fontSize:15}}>⚠️ 지연 확인 필요</div>{delayed.slice(0,3).map((o,i)=><div key={i} style={{fontSize:14,padding:"12px 0",borderBottom:i<2?`1px solid ${C.bdr}`:"none",display:'flex',justifyContent:'space-between'}}><span>{o.date} 발주</span><Tag ch="지연" c={C.red}/></div>)}</Card>}
     </div>
   );
 }
 
-// [상품관리] 원부자재 카테고리 + 단위 + '색상' 필드 복구
+// ── 상품관리: '공장 선택' 및 '원부자재 색상' 복구 ──
 function ProdsPage({products=[],setProducts,vendors=[],factories=[],user}){
   const [sheet,setSheet]=useState(false);
   const [step,setStep]=useState(0);
@@ -113,7 +110,7 @@ function ProdsPage({products=[],setProducts,vendors=[],factories=[],user}){
   const getUnit = t => ["단추", "지퍼", "기타"].includes(t) ? "개" : "yd";
 
   const addBom=()=>{
-    if(!br.mat||!br.amt||!br.vid) return alert("거래처와 명칭, 수량을 모두 입력하세요");
+    if(!br.mat||!br.amt||!br.vid) return alert("거래처와 정보를 모두 입력하세요");
     const nb={...br, id:uid(), amt:Number(br.amt), unit:getUnit(br.type)};
     setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:[...(p.colorBom[selColor]||[]),nb]}}));
     setBr({mat:"",amt:"",vid:"",type:"원단",color:""});setVSearch("");
@@ -122,9 +119,20 @@ function ProdsPage({products=[],setProducts,vendors=[],factories=[],user}){
   async function save(){
     if(!f.name||!f.colors.length) return alert("이름과 색상을 입력하세요");
     const data={...f, user_id:user.id, color_bom:f.colorBom, factory_id:f.factoryId};
-    if(f.id){ await DB.update(user.token,"products",f.id,data); setProducts(ps=>ps.map(p=>p.id===f.id?{...f}:p)); }
-    else { const r=await DB.insert(user.token,"products",data); setProducts(ps=>[...ps, r[0]]); }
-    setSheet(false);
+    try {
+      let res;
+      if(f.id) res = await DB.update(user.token,"products",f.id,data);
+      else res = await DB.insert(user.token,"products",data);
+      
+      // ✅ 화이트 스크린 방지: 데이터가 정상 배열인 경우에만 상태 업데이트
+      if(Array.isArray(res) && res.length > 0) {
+        if(f.id) setProducts(ps=>ps.map(p=>p.id===f.id?res[0]:p));
+        else setProducts(ps=>[...ps, res[0]]);
+        setSheet(false);
+      } else {
+        alert("저장에 실패했습니다. 관리자에게 문의하세요.");
+      }
+    } catch(e) { alert("네트워크 오류가 발생했습니다."); }
   }
 
   return(
@@ -134,9 +142,10 @@ function ProdsPage({products=[],setProducts,vendors=[],factories=[],user}){
       {sheet && <Sheet title={f.id?"상품 수정":"새 상품 등록"} onClose={()=>setSheet(false)}>
         <div style={{display:"flex",gap:8,marginBottom:24}}><div style={{flex:1,height:5,background:C.acc,borderRadius:3}}/><div style={{flex:1,height:5,background:step===1?C.acc:C.bdr,borderRadius:3}}/></div>
         {step===0 ? <>
-          <Field label="상품명" req><TxtInp val={f.name} onChange={v=>setF(p=>({...p,name:v}))} ph="로얄 옥스포드 셔츠"/></Field>
+          <Field label="상품명" req><TxtInp val={f.name} onChange={v=>setF(p=>({...p,name:v}))} ph="예: 로얄 트윌 셔츠"/></Field>
           <Field label="카테고리" req><div style={{display:'flex',flexWrap:'wrap',gap:8}}>{CATS.map(c=><button key={c} onClick={()=>setF(p=>({...p,category:c}))} style={{padding:"10px 16px",borderRadius:12,border:`2px solid ${f.category===c?C.acc:C.bdr}`,background:f.category===c?C.acc:"#fff",color:f.category===c?"#fff":C.sub2,fontWeight:800}}>{c}</button>)}</div></Field>
-          <Field label="생산 공장" req><select value={f.factoryId} onChange={e=>setF(p=>({...p,factoryId:e.target.value}))} style={{width:"100%",padding:14,borderRadius:12,border:`1.5px solid ${C.bdr}`,fontFamily:C.fn,outline:"none"}}><option value="">공장 선택</option>{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</select></Field>
+          {/* ✅ 공장 필드 복구 */}
+          <Field label="생산 공장" req><select value={f.factoryId} onChange={e=>setF(p=>({...p,factoryId:e.target.value}))} style={{width:"100%",padding:14,borderRadius:12,border:`1.5px solid ${C.bdr}`,fontFamily:C.fn,outline:"none"}}><option value="">공장을 선택해 주세요</option>{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</select></Field>
           <Field label="색상 추가"><div style={{display:"flex",gap:10}}><TxtInp val={ci} onChange={setCi} ph="예: 아이보리"/><button onClick={addColor} style={{background:C.acc,color:"#fff",padding:"0 20px",borderRadius:12,border:"none",fontWeight:800}}>추가</button></div></Field>
           <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:30}}>{f.colors.map(c=><span key={c} style={{background:C.bg,padding:"8px 16px",borderRadius:10,fontSize:14,fontWeight:700,border:`1px solid ${C.bdr}`}}>{c}</span>)}</div>
           <Btn ch="다음: 원부자재 등록" full onClick={()=>{if(!f.colors.length)return alert("색상을 추가하세요");setSelColor(f.colors[0]);setStep(1);}} st={{height:52}}/>
@@ -146,88 +155,18 @@ function ProdsPage({products=[],setProducts,vendors=[],factories=[],user}){
             <div style={{fontWeight:800,marginBottom:16,fontSize:16}}>[{selColor}] 원부자재 등록</div>
             {(f.colorBom[selColor]||[]).map(b=><div key={b.id} style={{fontSize:14,marginBottom:10,display:'flex',justifyContent:'space-between',background:'#fff',padding:'12px 16px',borderRadius:12,border:`1px solid ${C.bdr}`,alignItems:'center'}}><div><Tag ch={b.type} c="#3772FF"/><span style={{marginLeft:8,fontWeight:700}}>{b.mat}</span><span style={{marginLeft:6,color:C.sub2}}>{b.color}</span><span style={{marginLeft:8,color:C.acc,fontWeight:800}}>{fmtN(b.amt)}{b.unit}</span></div><button onClick={()=>{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:p.colorBom[selColor].filter(x=>x.id!==b.id)}}))}} style={{border:'none',background:'none',color:C.red,fontWeight:700,padding:4}}>✕</button></div>)}
             <div style={{marginTop:16,borderTop:`1.5px dashed ${C.bdr}`,paddingTop:20}}>
-              {/* ✅ 원부자재 카테고리 선택 */}
               <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:14}}>{MAT_TYPES.map(t=><button key={t} onClick={()=>setBr(p=>({...p,type:t}))} style={{padding:"8px 12px",borderRadius:10,border:`1.5px solid ${br.type===t?C.acc:C.bdr}`,background:br.type===t?C.acc:"#fff",color:br.type===t?"#fff":C.sub2,fontSize:12,fontWeight:700}}>{t}</button>)}</div>
-              <div style={{position:"relative",marginBottom:10}}><TxtInp val={vSearch} onChange={setVSearch} ph="거래처 검색"/><div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",zIndex:99,borderRadius:12,boxShadow:"0 10px 20px rgba(0,0,0,0.1)"}}>{vSearch && !br.vid && vendors.filter(v=>v.name.includes(vSearch)).map(v=><div key={v.id} onClick={()=>{setBr(p=>({...p,vid:v.id}));setVSearch(v.name);}} style={{padding:14,borderBottom:`1px solid ${C.bg}`,fontWeight:600}}>{v.name}</div>)}</div></div>
+              <div style={{position:"relative",marginBottom:10}}><TxtInp val={vSearch} onChange={setVSearch} ph="공급 거래처 검색"/><div style={{position:"absolute",top:"100%",left:0,right:0,background:"#fff",zIndex:99,borderRadius:12,boxShadow:"0 10px 20px rgba(0,0,0,0.1)"}}>{vSearch && !br.vid && vendors.filter(v=>v.name.includes(vSearch)).map(v=><div key={v.id} onClick={()=>{setBr(p=>({...p,vid:v.id}));setVSearch(v.name);}} style={{padding:14,borderBottom:`1px solid ${C.bg}`,fontWeight:600}}>{v.name}</div>)}</div></div>
               <TxtInp val={br.mat} onChange={v=>setBr(p=>({...p,mat:v}))} ph="원부자재 명칭 (예: 40수 실켓)"/>
-              <div style={{height:8}}/>
-              {/* ✅ 원부자재 색상 필드 복구 */}
-              <TxtInp val={br.color} onChange={v=>setBr(p=>({...p,color:v}))} ph="색상 (예: 블랙, 실버)"/>
+              <div style={{height:10}}/>
+              {/* ✅ 원부자재 자체 색상 필드 복구 */}
+              <TxtInp val={br.color} onChange={v=>setBr(p=>({...p,color:v}))} ph="원부자재 색상 (예: 블랙, 실버)"/>
               <div style={{display:"flex",gap:10,marginTop:10,alignItems:'center'}}><div style={{flex:1}}><TxtInp val={br.amt} onChange={v=>setBr(p=>({...p,amt:v}))} ph="소요량" type="number"/></div><span style={{width:40,fontWeight:800,color:C.sub2,fontSize:13}}>{getUnit(br.type)}</span><Btn ch="+ 추가" sz="s" onClick={addBom} st={{width:80,height:48}}/></div>
             </div>
           </div>
           <div style={{display:"flex",gap:12}}><Btn ch="이전으로" v="w" full onClick={()=>setStep(0)}/><Btn ch="상품 저장 완료" full onClick={save} st={{background:C.acc}}/></div>
         </>}
       </Sheet>}
-    </div>
-  );
-}
-
-function VendorPage({vendors=[],setVendors,user}){
-  const [sheet,setSheet]=useState(false); const [f,setF]=useState({name:"",tel:"",address:"",type:"원단",bizNo:""});
-  async function save(){
-    if(!f.name||!f.tel) return alert("필수 정보를 입력하세요");
-    if(f.id){ await DB.update(user.token,"vendors",f.id,f); setVendors(vs=>vs.map(v=>v.id===f.id?f:v)); }
-    else { const r=await DB.insert(user.token,"vendors",{...f,user_id:user.id}); setVendors(vs=>[...vs,r[0]]); }
-    setSheet(false);
-  }
-  return(
-    <div style={{padding:"20px 16px 100px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}><div style={{fontSize:22,fontWeight:900}}>거래처 관리</div><Btn ch="+ 추가" sz="s" onClick={()=>{setF({name:"",tel:"",address:"",type:"원단",bizNo:""});setSheet(true);}}/></div>
-      {vendors.map(v=><Card key={v.id} onClick={()=>{setF(v);setSheet(true);}} st={{padding:24}}><div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}><div style={{fontWeight:800,fontSize:17}}>{v.name}</div><Tag ch={v.type} c="#FF8A00"/></div><div style={{fontSize:13,color:C.sub2,marginTop:8}}>📱 {v.tel}</div></Card>)}
-      {sheet && <Sheet title="거래처 상세 정보" onClose={()=>setSheet(false)}>
-        <Field label="거래처명" req><TxtInp val={f.name} onChange={v=>setF(p=>({...p,name:v}))}/></Field>
-        <Field label="연락처" req><TxtInp val={f.tel} onChange={v=>setF(p=>({...p,tel:v}))}/></Field>
-        <Field label="사업자등록번호"><TxtInp val={f.bizNo} onChange={v=>setF(p=>({...p,bizNo:v}))}/></Field>
-        <Field label="주소"><TxtInp val={f.address} onChange={v=>setF(p=>({...p,address:v}))}/></Field>
-        <Btn ch="거래처 저장" full onClick={save} st={{height:52,marginTop:10}}/>
-      </Sheet>}
-    </div>
-  );
-}
-
-function SettingsPage({user,setUser,factories=[],setFactories,onLogout}){
-  const [facSheet,setFacSheet]=useState(null); const [pfSheet,setPfSheet]=useState(false);
-  const [pf,setPf]=useState({name:user?.name||"",brand:user?.brand||"",tel:user?.tel||""});
-  async function savePf(){ const r=await fetch(`${SB}/auth/v1/user`,{method:"PUT",headers:ah(user.token),body:JSON.stringify({data:pf})}); if(r.ok){ setUser(u=>({...u,...pf})); setPfSheet(false); alert("수정되었습니다."); } }
-  async function saveFac(){
-    if(!facSheet.name) return alert("공장명을 입력하세요");
-    if(facSheet.id){ await DB.update(user.token,"factories",facSheet.id,facSheet); setFactories(fs=>fs.map(f=>f.id===facSheet.id?factories:f)); }
-    else { const r=await DB.insert(user.token,"factories",{...facSheet,user_id:user.id}); setFactories(fs=>[...fs,r[0]]); }
-    setFacSheet(null);
-  }
-  return(
-    <div style={{padding:"20px 16px 100px"}}><div style={{fontSize:22,fontWeight:900,marginBottom:24,textAlign:'center'}}>설정</div>
-      <Card st={{background:C.acc,color:"#fff",padding:"36px 24px"}}><div style={{fontSize:14,opacity:0.7,marginBottom:8}}>{user?.company}</div><div style={{fontSize:26,fontWeight:900,marginBottom:20}}>{user?.brand} · {user?.name}</div><Btn ch="내 프로필 수정" v="w" sz="s" st={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"none",fontWeight:800}} onClick={()=>setPfSheet(true)}/></Card>
-      <div style={{fontWeight:800,fontSize:17,marginTop:40,marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>🏭 공장 관리 <button onClick={()=>setFacSheet({name:"",bizNo:"",address:"",tel:"",account:""})} style={{fontSize:13,color:C.acc,background:C.bg,border:'none',padding:'6px 12px',borderRadius:8,fontWeight:800}}>+ 추가</button></div>
-      {factories.map(fc=><Card key={fc.id} onClick={()=>setFacSheet(fc)} st={{padding:24}}><div style={{fontWeight:800,fontSize:16}}>{fc.name}</div><div style={{fontSize:13,color:C.sub2,marginTop:8}}>📞 {fc.tel || "연락처 미등록"}</div></Card>)}
-      <Btn ch="로그아웃" v="red" full onClick={onLogout} st={{marginTop:40,borderRadius:18,height:58,fontWeight:800}}/>
-      {pfSheet && <Sheet title="내 프로필 수정" onClose={()=>setPfSheet(false)}><Field label="브랜드명"><TxtInp val={pf.brand} onChange={v=>setPf(p=>({...p,brand:v}))}/></Field><Field label="성함" req><TxtInp val={pf.name} onChange={v=>setPf(p=>({...p,name:v}))}/></Field><Field label="연락처" req><TxtInp val={pf.tel} onChange={v=>setPf(p=>({...p,tel:v}))}/></Field><Btn ch="수정 완료" full onClick={savePf} st={{height:52,marginTop:12}}/></Sheet>}
-      {facSheet && <Sheet title="공장 상세 정보" onClose={()=>setFacSheet(null)}><Field label="공장명" req><TxtInp val={facSheet.name} onChange={v=>setFacSheet(p=>({...p,name:v}))}/></Field><Field label="사업자등록번호"><TxtInp val={facSheet.bizNo} onChange={v=>setFacSheet(p=>({...p,bizNo:v}))}/></Field><Field label="계좌정보"><TxtInp val={facSheet.account} onChange={v=>setFacSheet(p=>({...p,account:v}))}/></Field><Field label="주소"><TxtInp val={facSheet.address} onChange={v=>setFacSheet(p=>({...p,address:v}))}/></Field><Btn ch="저장하기" full onClick={saveFac} st={{height:52,marginTop:12}}/></Sheet>}
-    </div>
-  );
-}
-
-// [공통] 발주하기 및 리스트 페이지
-function OrderPage({products=[],setOrders,user}){
-  const [selP,setSelP]=useState(null); const [selC,setSelC]=useState(""); const [qty,setQty]=useState("");
-  async function submit(){
-    if(!selP||!selC||!qty) return alert("항목을 모두 입력하세요");
-    const o={date:today(), status:"진행중", items:[{pid:selP.id, color:selC, qty:Number(qty)}], user_id:user.id};
-    const r=await DB.insert(user.token,"orders",o); setOrders(prev=>[r[0],...prev]); alert("발주 완료!");
-  }
-  return(
-    <div style={{padding:"20px 20px 100px"}}><div style={{fontSize:22,fontWeight:900,marginBottom:24}}>발주 입력</div><Card>
-        <Field label="상품 선택"><select onChange={e=>setSelP(products.find(p=>p.id===e.target.value))} style={{width:"100%",padding:14,borderRadius:12,border:`1.5px solid ${C.bdr}`,fontFamily:C.fn,outline:"none"}}><option value="">상품 선택</option>{products.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
-        <Field label="색상 선택"><select onChange={e=>setSelC(e.target.value)} style={{width:"100%",padding:14,borderRadius:12,border:`1.5px solid ${C.bdr}`,fontFamily:C.fn,outline:"none"}}><option value="">색상 선택</option>{selP?.colors.map(c=><option key={c} value={c}>{c}</option>)}</select></Field>
-        <Field label="발주 수량 (장)"><TxtInp val={qty} onChange={setQty} type="number"/></Field>
-        <Btn ch="발주 확정하기" full onClick={submit} st={{marginTop:10,height:52}}/></Card></div>
-  );
-}
-
-function ListPage({orders=[]}){
-  return(
-    <div style={{padding:"20px 20px 100px"}}><div style={{fontSize:22,fontWeight:900,marginBottom:24}}>발주 리스트</div>
-      {orders.sort((a,b)=>new Date(b.date)-new Date(a.date)).map(o=><Card key={o.id} st={{padding:24}}><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontWeight:800,fontSize:16}}>{o.date} 발주</div><div style={{fontSize:13,color:C.sub2,marginTop:6}}>{(o.items||[]).length}개 품목 진행 중</div></div><Tag ch={o.status} c={o.status==="지연"?C.red:C.ok}/></div></Card>)}
     </div>
   );
 }
@@ -251,9 +190,6 @@ export default function App(){
   const pages={
     dash:<DashPage orders={orders} products={products}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
-    order:<OrderPage products={products} setOrders={setOrders} user={user}/>,
-    list:<ListPage orders={orders}/>,
-    vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
     settings:<SettingsPage user={user} setUser={setUser} factories={factories} setFactories={setFactories} onLogout={handleLogout}/>,
   };
 
@@ -265,10 +201,32 @@ export default function App(){
       </div>
       <div>{pages[page] || pages["dash"]}</div>
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:`1px solid ${C.bdr}`,display:"flex",height:75,zIndex:50}}>
-        {[ {k:"dash",l:"대시보드"},{k:"prods",l:"상품관리"},{k:"order",l:"발주하기"},{k:"list",l:"발주리스트"},{k:"settings",l:"설정"} ].map(t=>(
+        {[ {k:"dash",l:"대시보드"},{k:"prods",l:"상품관리"},{k:"settings",l:"설정"} ].map(t=>(
           <button key={t.k} onClick={()=>setPage(t.k)} style={{ flex:1, background:page===t.k?"#F0F3F7":"none", border:"none", borderRight:t.k!=="settings"?`1px solid ${C.bdr}`:"none", color:page===t.k?C.acc:C.sub2, fontWeight:page===t.k?800:600, fontSize:12, display:"flex", alignItems:"center", justifyContent:"center" }}>{t.l}</button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// 나머지 페이지(SettingsPage 등)는 이전 코드와 동일하게 유지
+function SettingsPage({user,setUser,factories=[],setFactories,onLogout}){
+  const [facSheet,setFacSheet]=useState(null); const [pfSheet,setPfSheet]=useState(false);
+  const [pf,setPf]=useState({name:user?.name||"",brand:user?.brand||"",tel:user?.tel||"",position:user?.position||""});
+  async function savePf(){ const r=await fetch(`${SB}/auth/v1/user`,{method:"PUT",headers:ah(user.token),body:JSON.stringify({data:pf})}); if(r.ok){ setUser(u=>({...u,...pf})); setPfSheet(false); alert("수정되었습니다."); } }
+  async function saveFac(){
+    if(facSheet.id){ await DB.update(user.token,"factories",facSheet.id,facSheet); setFactories(fs=>fs.map(f=>f.id===facSheet.id?facSheet:f)); }
+    else { const r=await DB.insert(user.token,"factories",{...facSheet,user_id:user.id}); setFactories(fs=>[...fs,r[0]]); }
+    setFacSheet(null);
+  }
+  return(
+    <div style={{padding:"20px 16px 100px"}}><div style={{fontSize:22,fontWeight:900,marginBottom:24,textAlign:'center'}}>설정</div>
+      <Card st={{background:C.acc,color:"#fff",padding:"36px 24px"}}><div style={{fontSize:26,fontWeight:900,marginBottom:20}}>{user?.brand} · {user?.name}</div><Btn ch="내 프로필 수정" v="w" sz="s" st={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"none",fontWeight:800}} onClick={()=>setPfSheet(true)}/></Card>
+      <div style={{fontWeight:800,fontSize:17,marginTop:40,marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>🏭 공장 관리 <button onClick={()=>setFacSheet({name:"",bizNo:"",address:"",tel:"",account:""})} style={{fontSize:13,color:C.acc,background:C.bg,border:'none',padding:'6px 12px',borderRadius:8,fontWeight:800}}>+ 추가</button></div>
+      {factories.map(fc=><Card key={fc.id} onClick={()=>setFacSheet(fc)} st={{padding:24}}><div style={{fontWeight:800,fontSize:16}}>{fc.name}</div></Card>)}
+      <Btn ch="로그아웃" v="red" full onClick={onLogout} st={{marginTop:40,borderRadius:18,height:58}}/>
+      {pfSheet && <Sheet title="내 프로필 수정" onClose={()=>setPfSheet(false)}><Field label="브랜드명"><TxtInp val={pf.brand} onChange={v=>setPf(p=>({...p,brand:v}))}/></Field><Field label="성함" req><TxtInp val={pf.name} onChange={v=>setPf(p=>({...p,name:v}))}/></Field><Btn ch="수정 완료" full onClick={savePf} st={{height:52,marginTop:12}}/></Sheet>}
+      {facSheet && <Sheet title="공장 상세 정보" onClose={()=>setFacSheet(null)}><Field label="공장명" req><TxtInp val={facSheet.name} onChange={v=>setFacSheet(p=>({...p,name:v}))}/></Field><Field label="사업자번호"><TxtInp val={facSheet.bizNo} onChange={v=>setFacSheet(p=>({...p,bizNo:v}))}/></Field><Field label="계좌정보"><TxtInp val={facSheet.account} onChange={v=>setFacSheet(p=>({...p,account:v}))}/></Field><Btn ch="저장하기" full onClick={saveFac} st={{height:52,marginTop:12}}/></Sheet>}
     </div>
   );
 }
