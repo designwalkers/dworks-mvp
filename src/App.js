@@ -845,7 +845,7 @@ export default function App(){
     setUser(null);setScreen("auth");
   }
 
-  const TABS=[{k:"order", l:"발주하기"},{k:"prods", l:"상품"},{k:"list", l:"발주리스트"},{k:"vendors", l:"거래처"},{k:"settings", l:"설정"}];
+  const TABS=[{k:"order", l:"발주하기"},{k:"prods", l:"상품"},{k:"list", l:"발주내역"},{k:"vendors", l:"거래처"},{k:"settings", l:"설정"}];
 
   if(screen==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:C.fn,color:C.sub2}}>로딩 중...</div>;
   if(screen==="splash")return<SplashPage onStart={()=>setScreen("auth")}/>;
@@ -888,7 +888,7 @@ export default function App(){
           transition:"all 0.2s",
           boxShadow:page===t.k?"0 8px 20px rgba(15,23,42,0.08)":"none"
         }}>
-          <span style={{fontSize:12,fontWeight:page===t.k?900:700,textAlign:"center",lineHeight:1.2}}>{t.l}</span>
+          <span style={{fontSize:11,fontWeight:page===t.k?900:700,textAlign:"center",lineHeight:1,whiteSpace:"nowrap",wordBreak:"keep-all",letterSpacing:"-0.02em"}}>{t.l}</span>
         </button>)}
       </div>
     </div>
