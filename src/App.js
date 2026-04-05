@@ -327,7 +327,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     const groupedByPid = items.reduce((acc, it) => { if(!acc[it.pid]) acc[it.pid] = []; acc[it.pid].push(it); return acc; }, {});
     const ts = new Date().toISOString(), d = today(), newOrders = [];
     for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      const o = { items: groupItems, status: "진행중", date: d, ts };
+      const o = { items: groupItems, status: "진행중", date: d, ts, is_archived:false, archived_at:null };
       try{
         if(!user?.token) { alert("로그인 정보가 없습니다."); setSending(false); return; }
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
@@ -597,16 +597,9 @@ function ListPage({orders,setOrders,products,user,onNav}){
   const [startDate,setStartDate]=useState("");
   const [endDate,setEndDate]=useState("");
   const [open,setOpen]=useState(null);
-  const [archivedIds,setArchivedIds]=useState(()=>{
-    try{return JSON.parse(localStorage.getItem("dworks_archived_orders_v1")||"[]");}catch{return [];}
-  });
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
 
-  function saveArchived(next){
-    setArchivedIds(next);
-    try{localStorage.setItem("dworks_archived_orders_v1",JSON.stringify(next));}catch{}
-  }
-  function isArchived(id){ return archivedIds.includes(id); }
+  function isArchived(order){ return !!order?.is_archived; }
 
   const getPastDate = (days) => {
     const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0,10);
@@ -627,7 +620,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
   }
 
   let base = dateFiltered.filter(o => {
-    const archived = isArchived(o.id);
+    const archived = isArchived(o);
     if(boxFilter === "보관함") return archived;
     if(archived) return false;
     if(boxFilter === "완료") return o.status === "완료";
@@ -642,22 +635,31 @@ function ListPage({orders,setOrders,products,user,onNav}){
     setOrders(p=>p.map(x=>x.id===id?{...x,status}:x));
     if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null);
   }
-  function archiveOrder(id){
+  async function archiveOrder(id){
     if(!window.confirm("목록에서 보관하시겠습니까? 데이터는 삭제되지 않습니다.")) return;
-    if(isArchived(id)) return;
-    saveArchived([...archivedIds,id]);
-    if(open===id) setOpen(null);
+    try{
+      if(user?.token) await DB.update(user.token,"orders",id,{is_archived:true,archived_at:new Date().toISOString()});
+      setOrders(p=>p.map(x=>x.id===id?{...x,is_archived:true,archived_at:new Date().toISOString()}:x));
+      if(open===id) setOpen(null);
+    }catch(e){
+      alert("보관 처리에 실패했습니다.");
+    }
   }
-  function unarchiveOrder(id){
-    saveArchived(archivedIds.filter(x=>x!==id));
-    if(open===id) setOpen(null);
+  async function unarchiveOrder(id){
+    try{
+      if(user?.token) await DB.update(user.token,"orders",id,{is_archived:false,archived_at:null});
+      setOrders(p=>p.map(x=>x.id===id?{...x,is_archived:false,archived_at:null}:x));
+      if(open===id) setOpen(null);
+    }catch(e){
+      alert("보관 해제에 실패했습니다.");
+    }
   }
   function handleReorder(o){ if(!window.confirm("새 발주를 진행하시겠습니까?")) return; try{localStorage.setItem("dworks_draft",JSON.stringify({items:o.items})); onNav("order");}catch{} }
 
   const boxCounts = {
-    진행중: dateFiltered.filter(o=>!isArchived(o.id) && o.status !== "완료").length,
-    완료: dateFiltered.filter(o=>!isArchived(o.id) && o.status === "완료").length,
-    보관함: dateFiltered.filter(o=>isArchived(o.id)).length,
+    진행중: dateFiltered.filter(o=>!isArchived(o) && o.status !== "완료").length,
+    완료: dateFiltered.filter(o=>!isArchived(o) && o.status === "완료").length,
+    보관함: dateFiltered.filter(o=>isArchived(o)).length,
   };
 
   return(
@@ -714,17 +716,17 @@ function ListPage({orders,setOrders,products,user,onNav}){
 
 function VendorPage({vendors,setVendors,user}){
   const [sheet,setSheet]=useState(false);
-  const [f,setF]=useState({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:""});
+  const [f,setF]=useState({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:"",memo:""});
   const [editId,setEditId]=useState(null);
   const [venSearch,setVenSearch]=useState("");
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
 
-  function openAdd(){setF({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:""});setEditId(null);setSheet(true);}
+  function openAdd(){setF({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:"",memo:""});setEditId(null);setSheet(true);}
   function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
 
   async function save(){
     if(!f.name || !f.tel || !f.address){alert("필수 항목 입력");return;}
-    const dataToSave = {name: f.name, tel: f.tel, sub_tel: f.subTel || null, email: f.email, type: f.type, address: f.address, biz_no: f.bizNo || null};
+    const dataToSave = {name: f.name, tel: f.tel, sub_tel: f.subTel || null, email: f.email, type: f.type, address: f.address, biz_no: f.bizNo || null, memo: f.memo || null};
     try{
       if(editId){
         if(user?.token) await DB.update(user.token,"vendors",editId,dataToSave);
@@ -733,7 +735,7 @@ function VendorPage({vendors,setVendors,user}){
         if(user?.token){
           const r=await DB.insert(user.token,"vendors",{...dataToSave,user_id:user.id});
           const nv = r[0];
-          setVendors(vv=>[...vv, {...nv, subTel:nv.sub_tel||"", address:nv.address||"", bizNo:nv.biz_no||""}]);
+          setVendors(vv=>[...vv, {...nv, subTel:nv.sub_tel||"", address:nv.address||"", bizNo:nv.biz_no||"", memo:nv.memo||""}]);
         }
       }
     }catch(e){alert("네트워크 에러"); return;}
@@ -748,7 +750,7 @@ function VendorPage({vendors,setVendors,user}){
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:900,fontSize:20}}>거래처 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
       <div style={{marginBottom:16}}><TxtInp val={venSearch} onChange={setVenSearch} ph="거래처명 초성 검색"/></div>
-      {filtered.length===0?<Empty icon="🏭" text="조건에 맞는 거래처가 없습니다"/>:filtered.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:40,height:40,borderRadius:12,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{VEN_IC[v.type]||"🏭"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div><div style={{color:C.sub,fontSize:12}}>📱 {v.tel||"핸드폰 미등록"}{v.subTel ? ` · ☎️ ${v.subTel}` : ""}</div>{v.address&&<div style={{fontSize:11,color:C.sub2,marginTop:2}}>📍 {v.address}</div>}{v.bizNo&&<div style={{fontSize:11,color:C.sub,marginTop:2}}>🏢 {v.bizNo}</div>}<div style={{fontSize:11,color:v.email?C.sub:C.warn,marginTop:2}}>{v.email||"⚠️ 이메일 미등록"}</div></div><div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(v)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(v.id)}/></div></div></Card>)}
+      {filtered.length===0?<Empty icon="🏭" text="조건에 맞는 거래처가 없습니다"/>:filtered.map(v=><Card key={v.id} st={{marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:40,height:40,borderRadius:12,background:(VEN_C[v.type]||C.sub)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}}>{VEN_IC[v.type]||"🏭"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}><span style={{fontWeight:800,fontSize:14}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div><div style={{color:C.sub,fontSize:12}}>📱 {v.tel||"핸드폰 미등록"}{v.subTel ? ` · ☎️ ${v.subTel}` : ""}</div>{v.address&&<div style={{fontSize:11,color:C.sub2,marginTop:2}}>📍 {v.address}</div>}{v.bizNo&&<div style={{fontSize:11,color:C.sub,marginTop:2}}>🏢 {v.bizNo}</div>}{v.memo&&<div style={{fontSize:11,color:C.sub2,marginTop:2,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden"}}>📝 {v.memo}</div>}<div style={{fontSize:11,color:v.email?C.sub:C.warn,marginTop:2}}>{v.email||"⚠️ 이메일 미등록"}</div></div><div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0}}><Btn ch="수정" v="w" sz="s" st={{padding:"5px 11px",fontSize:12}} onClick={()=>openEdit(v)}/><Btn ch="삭제" v="w" sz="s" st={{padding:"5px 11px",fontSize:12,color:C.red}} onClick={()=>del(v.id)}/></div></div></Card>)}
       {sheet&&<Sheet title={editId?"거래처 수정":"거래처 추가"} onClose={()=>setSheet(false)}>
         <Field label="거래처명" req><TxtInp val={f.name} onChange={sf("name")} ph="이레텍스"/></Field>
         <Field label="핸드폰번호" req><TxtInp val={f.tel} onChange={sf("tel")} ph="010-0000-0000" type="tel"/></Field>
@@ -757,6 +759,7 @@ function VendorPage({vendors,setVendors,user}){
         <Field label="사업자 등록번호"><TxtInp val={f.bizNo} onChange={sf("bizNo")} ph="000-00-00000" /></Field>
         <Field label="이메일 (발주서 발송용)"><TxtInp val={f.email} onChange={sf("email")} ph="order@fabric.com" type="email"/></Field>
         <Field label="업체 유형"><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VEN_TYPES.map(t=>{const act=f.type===t;return<button key={t} onClick={()=>sf("type")(t)} style={{padding:"7px 13px",borderRadius:20,border:`1.5px solid ${act?(VEN_C[t]||C.acc):C.bdr}`,background:act?(VEN_C[t]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:4}}>{VEN_IC[t]} {t}</button>;})}</div></Field>
+        <Field label="메모"><div style={{border:`1px solid ${C.bdr}`,borderRadius:8,background:"#fff"}}><textarea value={f.memo||""} onChange={e=>sf("memo")(e.target.value)} placeholder="최소 수량, 결제 조건, 응대 메모 등을 입력하세요" style={{width:"100%",minHeight:88,border:"none",outline:"none",resize:"vertical",padding:"12px 14px",fontSize:13,color:C.txt,fontFamily:C.fn,background:"transparent",boxSizing:"border-box"}}/></div></Field>
         <G/><div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={save}/></div>
       </Sheet>}
     </div>
@@ -778,12 +781,12 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
     const{id,...data}=facSheet;
     try{
       if(id){
-        if(user?.token) await DB.update(user.token,"factories",id,{...data,biz_type:data.bizType, biz_no:data.bizNo||null});
+        if(user?.token) await DB.update(user.token,"factories",id,{...data,biz_type:data.bizType, biz_no:data.bizNo||null, memo:data.memo||null});
         setFactories(ff=>ff.map(x=>x.id===id?{...x,...data}:x));
       }else{
         if(user?.token){
-          const r=await DB.insert(user.token,"factories",{name:data.name,biz_type:data.bizType,address:data.address,tel:data.tel,account:data.account,biz_no:data.bizNo||null,user_id:user.id});
-          setFactories(ff=>[...ff,{...r[0],bizType:r[0].biz_type||"", bizNo:r[0].biz_no||""}]);
+          const r=await DB.insert(user.token,"factories",{name:data.name,biz_type:data.bizType,address:data.address,tel:data.tel,account:data.account,biz_no:data.bizNo||null,memo:data.memo||null,user_id:user.id});
+          setFactories(ff=>[...ff,{...r[0],bizType:r[0].biz_type||"", bizNo:r[0].biz_no||"", memo:r[0].memo||""}]);
         }
       }
     }catch(e){alert("네트워크 에러"); return;}
@@ -817,7 +820,7 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
       <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={{fontWeight:900,fontSize:15,color:C.txt}}>공장 관리</div>
-          <Btn ch="+ 추가" sz="s" onClick={()=>setFacSheet({id:null,name:"",bizType:"",address:"",tel:"",account:"",bizNo:""})}/>
+          <Btn ch="+ 추가" sz="s" onClick={()=>setFacSheet({id:null,name:"",bizType:"",address:"",tel:"",account:"",bizNo:"",memo:""})}/>
         </div>
         {factories.length===0?<div style={{textAlign:"center",padding:"20px 0",color:C.sub2,fontSize:13,fontWeight:700}}>등록된 공장이 없습니다</div>:factories.map(fc=><div key={fc.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.bdr}`}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
@@ -830,9 +833,10 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
               <div style={{color:C.sub2,fontSize:12}}>{fc.tel||"연락처 없음"}</div>
               {fc.bizNo&&<div style={{color:C.sub,fontSize:11,marginTop:3}}>{fc.bizNo}</div>}
               {fc.account&&<div style={{color:C.sub,fontSize:11,marginTop:2}}>{fc.account}</div>}
+              {fc.memo&&<div style={{color:C.sub2,fontSize:11,marginTop:2,display:"-webkit-box",WebkitLineClamp:1,WebkitBoxOrient:"vertical",overflow:"hidden"}}>📝 {fc.memo}</div>}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              <Btn ch="수정" v="w" sz="s" st={{minWidth:64}} onClick={()=>setFacSheet({...fc,bizType:fc.bizType||fc.biz_type||"",bizNo:fc.bizNo||fc.biz_no||""})}/>
+              <Btn ch="수정" v="w" sz="s" st={{minWidth:64}} onClick={()=>setFacSheet({...fc,bizType:fc.bizType||fc.biz_type||"",bizNo:fc.bizNo||fc.biz_no||"",memo:fc.memo||""})}/>
               <Btn ch="삭제" v="w" sz="s" st={{minWidth:64,color:C.red}} onClick={()=>delFac(fc.id)}/>
             </div>
           </div>
@@ -856,6 +860,7 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
         <Field label="연락처"><TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
         <Field label="계좌정보"><TxtInp val={facSheet.account||""} onChange={v=>setFacSheet(p=>({...p,account:v}))} ph="은행 / 예금주 / 계좌번호"/></Field>
         <Field label="사업자번호"><TxtInp val={facSheet.bizNo||""} onChange={v=>setFacSheet(p=>({...p,bizNo:v}))} ph="000-00-00000"/></Field>
+        <Field label="메모"><div style={{border:`1px solid ${C.bdr}`,borderRadius:8,background:"#fff"}}><textarea value={facSheet.memo||""} onChange={e=>setFacSheet(p=>({...p,memo:e.target.value}))} placeholder="리드타임, 작업 특이사항, 정산 메모 등을 입력하세요" style={{width:"100%",minHeight:88,border:"none",outline:"none",resize:"vertical",padding:"12px 14px",fontSize:13,color:C.txt,fontFamily:C.fn,background:"transparent",boxSizing:"border-box"}}/></div></Field>
         <div style={{display:"flex",gap:10,marginTop:8}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setFacSheet(null)}/><Btn ch="저장" full st={{flex:2}} onClick={saveFac}/></div>
       </Sheet>}
     </div>
@@ -877,10 +882,10 @@ export default function App(){
     setLoading(true);
     try{
       const[v,f,p,o]=await Promise.all([DB.list(token,"vendors"),DB.list(token,"factories"),DB.list(token,"products"),DB.list(token,"orders")]);
-      setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||""})):[]);
-      setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||""})):[]);
+      setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||"", memo:x.memo||""})):[]);
+      setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||"", memo:x.memo||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{}, imageUrl:x.image_url||""})):[]);
-      setOrders(Array.isArray(o)?o:[]);
+      setOrders(Array.isArray(o)?o.map(x=>({...x,is_archived:!!x.is_archived,archived_at:x.archived_at||null})):[]);
     }catch(e){setScreen("auth");}
     finally{setLoading(false);}
   }
