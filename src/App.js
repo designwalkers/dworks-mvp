@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 
 
 // ── Kakao Share ───────────────────────────────────────────────
-const KAKAO_JS_KEY = "5acd9965b0d4d4b0cb81f45a8b3d53d7";
+const KAKAO_JS_KEY = "6db3f4f8e6ed71cc351978a8228292b6";
 
 function loadKakaoSdk() {
   return new Promise((resolve, reject) => {
