@@ -1,89 +1,45 @@
+
 import React, { useState, useEffect } from "react";
 
-
-// ── Kakao Share ───────────────────────────────────────────────
-const KAKAO_JS_KEY = "6db3f4f8e6ed71cc351978a8228292b6";
-
-function loadKakaoSdk() {
-  return new Promise((resolve, reject) => {
-    if (typeof window === "undefined") {
-      reject(new Error("window 객체를 찾을 수 없습니다."));
-      return;
+// ── Kakao Copy & Open ──────────────────────────────────────────
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
     }
+  } catch (e) {}
 
-    if (window.Kakao) {
-      if (!window.Kakao.isInitialized()) {
-        window.Kakao.init(KAKAO_JS_KEY);
-      }
-      resolve(window.Kakao);
-      return;
-    }
-
-    const existing = document.querySelector('script[src="https://developers.kakao.com/sdk/js/kakao.min.js"]');
-    if (existing) {
-      existing.addEventListener("load", () => {
-        if (!window.Kakao) {
-          reject(new Error("Kakao SDK 로드 실패"));
-          return;
-        }
-        if (!window.Kakao.isInitialized()) {
-          window.Kakao.init(KAKAO_JS_KEY);
-        }
-        resolve(window.Kakao);
-      });
-      existing.addEventListener("error", () => reject(new Error("Kakao SDK 스크립트 로드 실패")));
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://developers.kakao.com/sdk/js/kakao.min.js";
-    script.async = true;
-
-    script.onload = () => {
-      if (!window.Kakao) {
-        reject(new Error("Kakao SDK 로드 실패"));
-        return;
-      }
-      if (!window.Kakao.isInitialized()) {
-        window.Kakao.init(KAKAO_JS_KEY);
-      }
-      resolve(window.Kakao);
-    };
-
-    script.onerror = () => reject(new Error("Kakao SDK 스크립트 로드 실패"));
-    document.body.appendChild(script);
-  });
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
 }
 
-async function shareKakaoOrder({ vendorName, body }) {
-  try {
-    const Kakao = await loadKakaoSdk();
+async function openKakaoWithOrderText(body) {
+  const copied = await copyText(body);
 
-    Kakao.Share.sendDefault({
-      objectType: "feed",
-      content: {
-        title: `[D-Works 발주서] ${vendorName}`,
-        description: body.length > 180 ? body.slice(0, 180) + "..." : body,
-        imageUrl: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1200&q=80",
-        link: {
-          mobileWebUrl: window.location.href,
-          webUrl: window.location.href,
-        },
-      },
-      buttons: [
-        {
-          title: "디웍스 열기",
-          link: {
-            mobileWebUrl: window.location.href,
-            webUrl: window.location.href,
-          },
-        },
-      ],
-    });
-  } catch (e) {
-    alert("카카오톡 공유 실행 중 오류가 발생했습니다.");
-    console.error(e);
+  if (!copied) {
+    alert("발주 내용 자동 복사에 실패했습니다. 다시 시도해주세요.");
+    return;
   }
+
+  alert("발주 내용이 복사되었습니다.\n카카오톡에서 채팅방을 선택한 뒤 붙여넣기 해주세요.");
+
+  setTimeout(() => {
+    window.location.href = "kakaotalk://";
+  }, 200);
 }
 
 // ── Supabase & API (기존 유지) ─────────────────────────────────
@@ -91,8 +47,6 @@ const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsIn
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined});return r.json();};
 const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)})};
-const EJS={SID:"service_raca1ke",TID:"template_hoej0ts",PK:"KlYRj7B6JNO01D2pm"};
-const sendEmail=async(to,name,sub,msg)=>{if(!to)return false;try{const r=await fetch("https://api.emailjs.com/api/v1.0/email/send",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({service_id:EJS.SID,template_id:EJS.TID,user_id:EJS.PK,template_params:{to_email:to,to_name:name,subject:sub,message:msg,from_name:"D-Works"}})});return r.status===200;}catch{return false;}};
 
 // ── 유틸 및 상수 (기존 유지) ────────────────────────────────────────────
 const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
@@ -157,8 +111,6 @@ function Field({label,children,req}){return<div style={{marginBottom:16}}><div s
 function TxtInp({val,onChange,ph,type="text",onKeyDown}){return<div style={{display:"flex",alignItems:"center",border:`1px solid ${C.bdr}`,borderRadius:18,background:"#fff",boxShadow:"0 6px 18px rgba(15,23,42,0.03)"}}><input value={val||""} onChange={e=>onChange&&onChange(e.target.value)} placeholder={ph} type={type} onKeyDown={onKeyDown} style={{flex:1,border:"none",outline:"none",padding:"15px 16px",fontSize:14,color:C.txt,fontFamily:C.fn,background:"transparent"}}/></div>;}
 function DropSel({val,onChange,children,ph}){return<div style={{position:"relative",border:`1px solid ${C.bdr}`,borderRadius:18,background:"#fff",boxShadow:"0 6px 18px rgba(15,23,42,0.03)"}}><select value={val||""} onChange={e=>onChange(e.target.value)} style={{width:"100%",border:"none",outline:"none",padding:"15px 16px",fontSize:14,color:val?C.txt:C.sub,fontFamily:C.fn,background:"transparent",WebkitAppearance:"none",cursor:"pointer"}}>{ph&&<option value="">{ph}</option>}{children}</select><span style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",color:C.sub,pointerEvents:"none",fontSize:11}}>∨</span></div>;}
 function StepBar({cur,total=4}){return<div style={{display:"flex",gap:8,marginBottom:22}}>{Array.from({length:total},(_,i)=><div key={i} style={{flex:i===cur?2:1,height:6,borderRadius:999,background:i<=cur?C.acc:"#E7ECF3",transition:"all 0.3s"}}/>)}</div>;}
-
-
 function Sheet({title,onClose,children}){
   return(
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(15,23,42,0.48)",display:"flex",alignItems:"flex-end",zIndex:9999}} onClick={onClose}>
@@ -173,7 +125,6 @@ function Sheet({title,onClose,children}){
     </div>
   );
 }
-
 function LineChart({data}){
   if(!data||data.length<2)return<div style={{height:90,display:"flex",alignItems:"center",justifyContent:"center",color:C.sub,fontSize:12}}>데이터 없음</div>;
   const W=320,H=96,p=12,vs=data.map(d=>d.v),mn=Math.min(...vs),mx=Math.max(...vs),rng=mx-mn||1;
@@ -185,7 +136,7 @@ function LineChart({data}){
 // ── Splash 및 인증 ──
 function SplashPage({onStart}){
   const [slide,setSlide]=useState(0);
-  const slides=[{title:"발주 업무,\n이제 자동으로",desc:"수기 계산·카카오톡 개별 발주\n이제 그만!",icon:"📋"},{title:"BOM 기반\n소요량 자동 계산",desc:"상품별 원부자재를 등록하면\n소요량이 자동 계산됩니다.",icon:"🧮"},{title:"거래처별\n원클릭 발송",desc:"업체별 발주서를 자동 생성하고\n이메일로 즉시 발송합니다.",icon:"📧"},{title:"발주 이력\n데이터화",desc:"모든 발주가 DB에 저장되어\n언제든 조회 가능합니다.",icon:"📊"}];
+  const slides=[{title:"발주 업무,\n이제 자동으로",desc:"수기 계산·카카오톡 개별 발주\n이제 그만!",icon:"📋"},{title:"BOM 기반\n소요량 자동 계산",desc:"상품별 원부자재를 등록하면\n소요량이 자동 계산됩니다.",icon:"🧮"},{title:"거래처별\n원클릭 발송",desc:"업체별 발주서를 자동 생성하고\n카카오톡으로 즉시 전달합니다.",icon:"💬"},{title:"발주 이력\n데이터화",desc:"모든 발주가 DB에 저장되어\n언제든 조회 가능합니다.",icon:"📊"}];
   return(
     <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column",fontFamily:C.fn}}>
       <div style={{padding:"44px 24px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -204,14 +155,12 @@ function SplashPage({onStart}){
     </div>
   );
 }
-
 function AuthPage({onLogin}){
   const [tab,setTab]=useState("in");
   const [f,setF]=useState({company:"",brand:"",name:"",position:"",tel:"",email:"",pw:"",pw2:"",address:"",agree:false, keepLoggedIn: true});
   const [err,setErr]=useState("");
   const [loading,setLoading]=useState(false);
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
-
   async function submit(){
     setErr("");
     if(!f.email||!f.pw){setErr("이메일과 비밀번호를 입력하세요");return;}
@@ -221,7 +170,6 @@ function AuthPage({onLogin}){
       if(f.pw.length<6){setErr("비밀번호 6자 이상");return;}
       if(!f.agree){setErr("개인정보 수집 및 이용에 동의해주세요");return;}
     }
-
     setLoading(true);
     try{
       if(tab==="up"){
@@ -260,14 +208,13 @@ function AuthPage({onLogin}){
         )}
         <Field label="이메일" req><TxtInp val={f.email} onChange={sf("email")} ph="example@email.com" type="email"/></Field>
         <Field label="비밀번호" req><TxtInp val={f.pw} onChange={sf("pw")} ph={tab==="up"?"6자 이상":"비밀번호"} type="password" onKeyDown={e=>e.key==="Enter"&&submit()}/></Field>
-        
+
         {tab==="in" && (
           <label style={{display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginBottom:10, padding:"4px 0"}}>
             <input type="checkbox" checked={f.keepLoggedIn} onChange={e=>sf("keepLoggedIn")(e.target.checked)} style={{width:16, height:16}} />
             <span style={{fontSize:13, fontWeight:600, color:C.sub2}}>로그인 상태 유지</span>
           </label>
         )}
-
         {tab==="up" && (
           <>
             <Field label="비밀번호 확인" req><TxtInp val={f.pw2} onChange={sf("pw2")} ph="비밀번호 재입력" type="password"/></Field>
@@ -295,7 +242,6 @@ function DashPage({orders,products,onNav}){
   const mQ=orders.filter(o=>o.date?.slice(0,7)===td.slice(0,7)).reduce((s,o)=>s+(o.items||[]).reduce((ss,i)=>ss+(i.qty||0),0),0);
   const delayed=orders.filter(o=>o.status==="지연");
   const chart=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().slice(0,10);return{label:ds.slice(5),v:orders.filter(o=>o.date===ds).reduce((s,o)=>s+(o.items||[]).reduce((ss,ii)=>ss+(ii.qty||0),0),0)};});
-
   return(
     <div style={{padding:"18px 14px 94px"}}>
       <Card st={{background:"linear-gradient(135deg,#101828 0%, #0F172A 50%, #172554 100%)",border:"none",color:"#fff",padding:20,marginBottom:16,boxShadow:"0 18px 40px rgba(15,23,42,0.18)"}}>
@@ -314,7 +260,6 @@ function DashPage({orders,products,onNav}){
           <Tag ch={`월간 ${fmtN(mQ)}매`} c="#FFFFFF" />
         </div>
       </Card>
-
       <Card st={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div>
@@ -326,7 +271,6 @@ function DashPage({orders,products,onNav}){
         <LineChart data={chart}/>
         <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>{chart.filter((_,i)=>i%2===0).map(d=><span key={d.label} style={{fontSize:10,color:C.sub2,fontWeight:700}}>{d.label}</span>)}</div>
       </Card>
-
       <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <div style={{fontWeight:800,fontSize:14,color:C.txt}}>지연 발주</div>
@@ -350,7 +294,6 @@ function DashPage({orders,products,onNav}){
     </div>
   );
 }
-
 function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [step,setStep]=useState(1);
   const [items,setItems]=useState([]);
@@ -362,45 +305,33 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [sending,setSending]=useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
-  useEffect(() => {
-    loadKakaoSdk().catch(() => {});
-  }, []);
-  
+
   const DRAFT="dworks_draft";
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
-
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
-  
+
   function generatePreview() {
     if (!items.length) {
       alert("발주 항목 추가");
       return;
     }
-
     const venMap = {};
-
     for (const it of items) {
       const prod = products.find(x => x.id === it.pid);
       if (!prod) continue;
-
       const bomList = prod.colorBom?.[it.color] || prod.bom || [];
-
       for (const b of bomList) {
         const ven = vendors.find(v => v.id === b.vid);
         if (!ven) continue;
-
         const soyo = Math.round(b.amt * it.qty * 100) / 100;
-
         if (!venMap[ven.id]) {
           venMap[ven.id] = {
             vendor: ven,
             products: {}
           };
         }
-
         const vendorGroup = venMap[ven.id];
-
         if (!vendorGroup.products[prod.name]) {
           vendorGroup.products[prod.name] = {
             productName: prod.name,
@@ -409,7 +340,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
             lines: []
           };
         }
-
         vendorGroup.products[prod.name].lines.push({
           mat: b.mat || "-",
           color: b.color || it.color,
@@ -419,71 +349,43 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         });
       }
     }
-
     const targets = Object.values(venMap);
     if (!targets.length) {
       alert("발송할 거래처가 없습니다.");
       return;
     }
-
     const companyName = user?.company || "디자인워커스";
-
     const pData = targets.map(({ vendor, products: groupedProducts }) => {
-      let body = `${vendor.name} 담당자님 안녕하세요.
-
-`;
-      body += `업체명 : ${companyName}
-
-`;
-
+      let body = `[D-Works 발주서]\n`;
+      body += `${vendor.name} 담당자님 안녕하세요.\n\n`;
+      body += `업체명: ${companyName}\n\n`;
       Object.values(groupedProducts).forEach(product => {
-        body += `[상품명]
-${product.productName}
-`;
-
+        body += `■ 상품명: ${product.productName}\n`;
         product.lines.forEach((line, idx) => {
-          body += `${idx + 1}. ${line.mat}
-`;
-          body += `- ${line.color} ${fmtN(line.soyo)}${line.unit}
-`;
+          body += `${idx + 1}. ${line.mat}\n`;
+          body += `   - 컬러: ${line.color}\n`;
+          body += `   - 수량: ${fmtN(line.soyo)}${line.unit}\n`;
         });
-
-        body += `
-`;
+        body += `\n`;
       });
-
       const firstProduct = Object.values(groupedProducts)[0];
-
-      body += `[입고처]
-${firstProduct?.factory || "-"}
-`;
-      body += `주소 : ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}
-`;
-      body += `연락처 : ${firstProduct?.factoryTel || "-"}
-
-`;
-
+      body += `■ 입고처\n`;
+      body += `${firstProduct?.factory || "-"}\n`;
+      body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}\n`;
+      body += `연락처: ${firstProduct?.factoryTel || "-"}\n`;
       if (memo) {
-        body += `[요청 및 전달사항]
-${memo}
-
-`;
+        body += `\n■ 요청 및 전달사항\n${memo}\n`;
       }
-
-      body += `감사합니다.
-D-Works`;
-
+      body += `\n감사합니다.\nD-Works`;
       return {
         vendor,
         groupedProducts,
         body
       };
     });
-
     setPreviewData(pData);
     setShowPreview(true);
   }
-
   async function confirmOrder() {
     setSending(true);
     const groupedByPid = items.reduce((acc, it) => { if(!acc[it.pid]) acc[it.pid] = []; acc[it.pid].push(it); return acc; }, {});
@@ -497,12 +399,12 @@ D-Works`;
         newOrders.push(r[0]);
       }catch(e){ alert("네트워크 에러"); setSending(false); return; }
     }
-    setOrders(p => [...newOrders, ...p]); try{localStorage.removeItem(DRAFT);}catch{}
-    let cnt=0;
-    for(const data of previewData){ if(await sendEmail(data.vendor.email, data.vendor.name, `[D-Works 발주서] ${today()} - ${data.vendor.name}`, data.body)) cnt++; }
-    setSending(false); setShowPreview(false); setStep(3);
+    setOrders(p => [...newOrders, ...p]);
+    try{localStorage.removeItem(DRAFT);}catch{}
+    setSending(false);
+    setShowPreview(false);
+    setStep(3);
   }
-
   function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setPreviewData([]);setShowPreview(false);}
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
   return(
@@ -519,7 +421,7 @@ D-Works`;
         </Card>
         <Btn ch="+ 발주 리스트에 추가" full onClick={addItem} disabled={!selProd||!selColor||!qty} st={{marginBottom:18}}/>
         <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 리스트</div>
-        
+
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
             const p=products.find(x=>x.id===it.pid);
@@ -546,10 +448,9 @@ D-Works`;
         <div style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:13,marginBottom:8,color:C.txt}}>전달사항 (선택)</div><textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="예: 소량 발주건으로 10야드는 본사로, 나머지는 공장으로 배송 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"80px",boxSizing:"border-box"}}/></div>
         <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch={"발주 미리보기"} full st={{flex:2}} onClick={generatePreview} /></div>
       </>}
-
       {showPreview && (
         <Sheet title="발주 내용 최종 확인" onClose={() => setShowPreview(false)}>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>아래 내용으로 총 <strong style={{color:C.txt}}>{previewData.length}곳</strong>의 거래처에 이메일 발주서가 발송됩니다.</div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>아래 내용을 거래처별로 확인한 뒤 카카오톡으로 보내거나 저장할 수 있습니다.</div>
           <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16, paddingRight: 4 }}>
             {previewData.map((d, i) => (
               <div
@@ -574,19 +475,17 @@ D-Works`;
                   }}
                 >
                   📦 받는 사람: {d.vendor.name}
-                  {d.vendor.email && (
+                  {d.vendor.tel && (
                     <span style={{ fontWeight: 500, color: C.sub }}>
-                      {" "}({d.vendor.email})
+                      {" "}({d.vendor.tel})
                     </span>
                   )}
                 </div>
-
                 {Object.values(d.groupedProducts).map((product, pIdx) => (
                   <div key={pIdx} style={{ marginBottom: 14 }}>
                     <div style={{ fontWeight: 800, fontSize: 12, color: C.txt, marginBottom: 8 }}>
                       [상품명] {product.productName}
                     </div>
-
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {product.lines.map((line, lIdx) => (
                         <div
@@ -609,7 +508,6 @@ D-Works`;
                     </div>
                   </div>
                 ))}
-
                 <div
                   style={{
                     fontSize: 11,
@@ -632,28 +530,24 @@ D-Works`;
                     </>
                   )}
                 </div>
-
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                   <Btn
                     ch="카카오톡으로 보내기"
                     full
-                    onClick={() =>
-                      shareKakaoOrder({
-                        vendorName: d.vendor.name,
-                        body: d.body
-                      })
-                    }
+                    onClick={() => openKakaoWithOrderText(d.body)}
                   />
                 </div>
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 10 }}><Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} /><Btn ch={sending ? "발송 중..." : "최종 발송하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} /></div>
+          <div style={{ display: "flex", gap: 10 }}><Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} /><Btn ch={sending ? "저장 중..." : "최종 저장하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} /></div>
         </Sheet>
       )}
     </div>
   );
 }
+
+// Remaining components kept as original...
 
 function ProdsPage({products,setProducts,vendors,factories,user}){
   const [catF,setCatF]=useState("전체");
@@ -667,44 +561,68 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
   const [br,setBr]=useState({type:"",mat:"",amt:"",vid:"",price:"",color:""});
   const [editBomId,setEditBomId]=useState(null);
   const [venSearch,setVenSearch]=useState("");
+  const [copySourceColor,setCopySourceColor]=useState("");
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const getUnit=t=>["단추","지퍼","기타"].includes(t)?"개":"yd";
-
   let filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
   filtered = filtered.filter(p=>match(p.name,prodSearch));
   if(sortOrd==="최신순") filtered=[...filtered].reverse();
   else if(sortOrd==="시즌별") filtered=[...filtered].sort((a,b)=>(b.season||"").localeCompare(a.season||""));
   else if(sortOrd==="공장별") filtered=[...filtered].sort((a,b)=>(a.factory||"").localeCompare(b.factory||""));
-
-  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{},imageUrl:""});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
-  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})},imageUrl:p.imageUrl||""});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
-
+  function openAdd(){setF({name:"",category:"",season:"26SS",factoryId:"",factory:"",factoryTel:"",colors:[],colorBom:{},imageUrl:""});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setCopySourceColor("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
+  function openEdit(p){setF({...p,colors:[...(p.colors||[])],colorBom:{...(p.colorBom||{})},imageUrl:p.imageUrl||""});setCi("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setCopySourceColor("");setSheetStep(0);setSelColor("");setEditBomId(null);setSheet(true);}
   function copyProd(p){
     setF({...p, id: undefined, name: p.name + " (복사본)", colors: [...(p.colors||[])], colorBom: JSON.parse(JSON.stringify(p.colorBom||{})), imageUrl: p.imageUrl||""});
-    setCi(""); setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""}); setVenSearch(""); setSheetStep(0); setSelColor(""); setEditBomId(null); setSheet(true);
+    setCi(""); setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""}); setVenSearch(""); setCopySourceColor(""); setSheetStep(0); setSelColor(""); setEditBomId(null); setSheet(true);
   }
-
   function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c],colorBom:{...p.colorBom,[c]:p.colorBom[c]||[]}}));setCi("");}
   function removeColor(c){setF(p=>{const nb={...p.colorBom};delete nb[c];return{...p,colors:p.colors.filter(x=>x!==c),colorBom:nb};});if(selColor===c)setSelColor("");}
-
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if(file) { const reader = new FileReader(); reader.onloadend = () => { setF(prev => ({...prev, imageUrl: reader.result})); }; reader.readAsDataURL(file); }
   };
-
   function goToStep1(){
     if(!f.name||f.colors.length===0){alert("상품명과 색상을 하나 이상 입력하세요");return;}
     setF(p=>{const nb={...p.colorBom};p.colors.forEach(c=>{if(!nb[c])nb[c]=[];});return{...p,colorBom:nb};});
-    setSelColor(f.colors[0]);setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setEditBomId(null);setSheetStep(1);
+    setSelColor(f.colors[0]);setCopySourceColor("");setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");setEditBomId(null);setSheetStep(1);
   }
-
   function addBom(){
     if(!br.mat||!br.amt)return;
     if(editBomId){setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).map(b=>b.id===editBomId?{...b,...br,amt:Number(br.amt)}:b)}}));setEditBomId(null);}
     else{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:[...(p.colorBom[selColor]||[]),{...br,id:uid(),amt:Number(br.amt),unit:getUnit(br.type)}]}}));}
     setBr({type:"",mat:"",amt:"",vid:"",price:""});setVenSearch("");
   }
-
+  function copyBomFromColor(){
+    if(!selColor){alert("복사할 현재 컬러를 선택하세요");return;}
+    if(!copySourceColor){alert("불러올 기준 컬러를 선택하세요");return;}
+    const srcBom = f.colorBom?.[copySourceColor] || [];
+    if(srcBom.length===0){alert("기준 컬러에 등록된 원부자재가 없습니다");return;}
+    const hasCurrent = (f.colorBom?.[selColor] || []).length > 0;
+    if(hasCurrent){
+      const ok = window.confirm(`${copySourceColor} 컬러의 원부자재를 ${selColor} 컬러로 불러오시겠습니까?\n현재 컬러에 등록된 원부자재는 덮어쓰기 됩니다.`);
+      if(!ok) return;
+    }else{
+      const ok = window.confirm(`${copySourceColor} 컬러의 원부자재를 ${selColor} 컬러로 불러오시겠습니까?\n색상명은 ${selColor} 기준으로 자동 변경됩니다.`);
+      if(!ok) return;
+    }
+    const copied = srcBom.map(b => ({
+      ...b,
+      id: uid(),
+      color: selColor
+    }));
+    setF(p => ({
+      ...p,
+      colorBom: {
+        ...p.colorBom,
+        [selColor]: copied
+      }
+    }));
+    setEditBomId(null);
+    setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});
+    setVenSearch("");
+    setCopySourceColor("");
+    alert(`${copySourceColor} 컬러 구성을 ${selColor} 컬러에 불러왔습니다.`);
+  }
   async function save(){
     if(!f.name)return;
     const sd={name:f.name, category:f.category, season:f.season, factory_id:f.factoryId||null, factory:f.factory, factory_tel:f.factoryTel, colors:f.colors, color_bom:f.colorBom, image_url:f.imageUrl};
@@ -723,22 +641,18 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     }catch(e){alert("네트워크 에러");return;}
     setSheet(false);
   }
-
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"products",id);}catch{}setProducts(products.filter(p=>p.id!==id));}
-
   const curBom=f.colorBom[selColor]||[];
-
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontWeight:900,fontSize:20}}>상품 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
-      
+
       <div style={{display:"flex",gap:7,marginBottom:12,overflowX:"auto",paddingBottom:4}}>{["전체",...CATS].map(cat=>{const cnt=cat==="전체"?products.length:products.filter(p=>p.category===cat).length;const act=catF===cat;return<button key={cat} onClick={()=>setCatF(cat)} style={{padding:"6px 12px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat} {cnt}</button>;})}</div>
-      
+
       <div style={{display:"flex",gap:8,marginBottom:14}}>
         <div style={{flex:1}}><TxtInp val={prodSearch} onChange={setProdSearch} ph="상품명 초성 검색"/></div>
         <div style={{width:100}}><DropSel val={sortOrd} onChange={setSortOrd}><option value="최신순">최신순</option><option value="시즌별">시즌별</option><option value="공장별">공장별</option></DropSel></div>
       </div>
-
       {filtered.length===0?<Empty icon="👕" text="조건에 맞는 상품이 없습니다"/>:filtered.map(p=>(
         <Card key={p.id} st={{marginBottom:10}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -755,7 +669,6 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
                 {p.colorBom&&Object.values(p.colorBom).some(b=>b.length>0)&&` · BOM 등록됨`}
               </div>
             </div>
-
             <div style={{display:"flex",flexDirection:"column",gap:5,flexShrink:0,alignItems:"flex-end"}}>
               <Btn ch="복사" v="w" sz="s" st={{padding:"4px 10px",fontSize:11,color:C.acc}} onClick={()=>copyProd(p)}/>
               <div style={{display:"flex", gap:5}}>
@@ -766,7 +679,6 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
           </div>
         </Card>
       ))}
-
       {sheet&&<Sheet title={f.id?"상품 수정":"상품 등록"} onClose={()=>setSheet(false)}>
         <StepBar cur={sheetStep} total={2}/>
         {sheetStep===0&&<>
@@ -777,27 +689,25 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
             <FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
           </FCard>
           {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
-
           <Field label="작업지시서 (선택)">
             <div style={{border: `1px dashed ${C.bdr}`, borderRadius: 8, padding: 16, textAlign: "center", background: "#fff", position: "relative"}}>
               {f.imageUrl ? (
-                 <div>
-                   <img src={f.imageUrl} alt="작업지시서" style={{maxWidth: "100%", maxHeight: 200, objectFit: "contain", borderRadius: 4}} />
-                   <div style={{marginTop: 8}}>
-                     <Btn ch="사진 변경" v="w" sz="s" onClick={()=>document.getElementById('img-upload').click()}/>
-                     <Btn ch="삭제" v="w" sz="s" st={{marginLeft: 8, color: C.red}} onClick={()=>setF(p=>({...p, imageUrl:""}))}/>
-                   </div>
-                 </div>
+                  <div>
+                    <img src={f.imageUrl} alt="작업지시서" style={{maxWidth: "100%", maxHeight: 200, objectFit: "contain", borderRadius: 4}} />
+                    <div style={{marginTop: 8}}>
+                      <Btn ch="사진 변경" v="w" sz="s" onClick={()=>document.getElementById('img-upload').click()}/>
+                      <Btn ch="삭제" v="w" sz="s" st={{marginLeft: 8, color: C.red}} onClick={()=>setF(p=>({...p, imageUrl:""}))}/>
+                    </div>
+                  </div>
               ) : (
-                 <div onClick={()=>document.getElementById('img-upload').click()} style={{cursor: "pointer", color: C.sub}}>
-                   <div style={{fontSize: 24, marginBottom: 8}}>📸</div>
-                   <div style={{fontSize: 12}}>클릭하여 작업지시서 사진 업로드</div>
-                 </div>
+                  <div onClick={()=>document.getElementById('img-upload').click()} style={{cursor: "pointer", color: C.sub}}>
+                    <div style={{fontSize: 24, marginBottom: 8}}>📸</div>
+                    <div style={{fontSize: 12}}>클릭하여 작업지시서 사진 업로드</div>
+                  </div>
               )}
               <input id="img-upload" type="file" accept="image/*" onChange={handleImageUpload} style={{display: "none"}} />
             </div>
           </Field>
-
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>{CATS.map(cat=>{const act=f.category===cat;return<button key={cat} onClick={()=>sf("category")(cat)} style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${act?(CAT_C[cat]||C.acc):C.bdr}`,background:act?(CAT_C[cat]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{cat}</button>;})}</div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
             <span style={{fontSize:12,fontWeight:700,color:C.txt}}>발주 색상 목록</span>
@@ -818,8 +728,29 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
         {sheetStep===1&&<>
           <div style={{fontSize:12,color:C.sub,marginBottom:12}}>색상 탭을 선택하고 원부자재를 등록하세요</div>
           <div style={{display:"flex",gap:6,marginBottom:14,overflowX:"auto",paddingBottom:2}}>
-            {f.colors.map(c=>{const cnt=(f.colorBom[c]||[]).length;const act=selColor===c;return<button key={c} onClick={()=>{setSelColor(c);setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}} style={{padding:"8px 16px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`2px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6}}>{c}{cnt>0&&<span style={{background:act?"rgba(255,255,255,0.25)":"#EEF2FF",color:act?"#fff":C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{cnt}</span>}</button>;})}</div>
+            {f.colors.map(c=>{const cnt=(f.colorBom[c]||[]).length;const act=selColor===c;return<button key={c} onClick={()=>{setSelColor(c);setCopySourceColor("");setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}} style={{padding:"8px 16px",borderRadius:20,flexShrink:0,whiteSpace:"nowrap",border:`2px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6}}>{c}{cnt>0&&<span style={{background:act?"rgba(255,255,255,0.25)":"#EEF2FF",color:act?"#fff":C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700}}>{cnt}</span>}</button>;})}
+          </div>
           {selColor?<>
+            {f.colors.filter(c=>c!==selColor && (f.colorBom[c]||[]).length>0).length>0 && (
+              <div style={{background:"#F8FAFC",border:`1px solid ${C.bdr}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:800,color:C.txt,marginBottom:8}}>
+                  📋 다른 컬러 원부자재 불러오기
+                </div>
+                <div style={{fontSize:11,color:C.sub2,marginBottom:10}}>
+                  규격·요척·거래처는 그대로 복사하고, 소재 색상은 현재 컬러({selColor})로 자동 변경됩니다.
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <div style={{flex:1}}>
+                    <DropSel val={copySourceColor} onChange={setCopySourceColor} ph="기준 컬러 선택">
+                      {f.colors
+                        .filter(c=>c!==selColor && (f.colorBom[c]||[]).length>0)
+                        .map(c=><option key={c} value={c}>{c}</option>)}
+                    </DropSel>
+                  </div>
+                  <Btn ch="불러오기" v="w" onClick={copyBomFromColor} disabled={!copySourceColor} st={{height:48,borderRadius:14}}/>
+                </div>
+              </div>
+            )}
             {curBom.length>0&&<div style={{marginBottom:10}}>{curBom.map(b=>{const ven=vendors.find(v=>v.id===b.vid);const isE=editBomId===b.id;return<div key={b.id} style={{background:isE?C.acc+"10":"#F8F9FB",borderRadius:8,padding:"9px 12px",marginBottom:6,border:`1.5px solid ${isE?C.acc:C.bdr}`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{flex:1,minWidth:0}}><span style={{background:C.acc+"15",color:C.acc,borderRadius:10,padding:"1px 7px",fontSize:10,fontWeight:700,marginRight:6}}>{b.type||"원단"}</span><span style={{fontWeight:700,fontSize:12}}>{b.mat}</span>{b.color&&<span style={{background:C.sub+"18",color:C.sub2,borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:600,marginLeft:5}}>{b.color}</span>}<span style={{color:C.sub,fontSize:11,marginLeft:6}}>{b.amt}{b.unit||"yd"}</span>{ven&&<span style={{color:C.sub,fontSize:11,marginLeft:4}}>· {ven.name}</span>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={()=>{if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}else{setEditBomId(b.id);setBr({type:b.type||"",mat:b.mat,amt:String(b.amt),vid:b.vid||"",price:String(b.price||""),color:b.color||""});const ev=vendors.find(v=>v.id===b.vid);setVenSearch(ev?.name||"");}}} style={{background:"none",border:"none",color:isE?C.acc:C.sub,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:C.fn}}>{isE?"취소":"수정"}</button><button onClick={()=>{setF(p=>({...p,colorBom:{...p.colorBom,[selColor]:(p.colorBom[selColor]||[]).filter(x=>x.id!==b.id)}}));if(isE){setEditBomId(null);setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""});setVenSearch("");}}} style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}}>✕</button></div></div></div>;})}</div>}
             <div style={{background:"#F0F4FF",borderRadius:12,padding:"14px",marginBottom:12,border:`1px dashed ${C.acc}60`}}>
               <div style={{fontSize:12,fontWeight:700,color:C.acc,marginBottom:10}}>✏️ [{selColor}] 원부자재 {editBomId?"수정":"추가"}</div>
@@ -850,14 +781,11 @@ function ListPage({orders,setOrders,products,user,onNav}){
   const [endDate,setEndDate]=useState("");
   const [open,setOpen]=useState(null);
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
-
   function isArchived(order){ return !!order?.is_archived; }
-
   const getPastDate = (days) => {
     const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0,10);
   };
   const tToday = today(), tYest = getPastDate(1), tWeek = getPastDate(7);
-
   let dateFiltered = orders;
   if (dateFilter === "오늘") dateFiltered = orders.filter(o => o.date === tToday);
   else if (dateFilter === "어제") dateFiltered = orders.filter(o => o.date === tYest);
@@ -870,7 +798,6 @@ function ListPage({orders,setOrders,products,user,onNav}){
       return true;
     });
   }
-
   let base = dateFiltered.filter(o => {
     const archived = isArchived(o);
     if(boxFilter === "보관함") return archived;
@@ -878,10 +805,8 @@ function ListPage({orders,setOrders,products,user,onNav}){
     if(boxFilter === "완료") return o.status === "완료";
     return o.status !== "완료";
   });
-
   const statusTabs = boxFilter === "진행중" ? ["전체","진행중","지연"] : boxFilter === "완료" ? ["전체","완료"] : ["전체","진행중","완료","지연"];
   const filtered=(filter==="전체"?base:base.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
-
   async function changeStatus(id,status){
     if(user?.token)try{await DB.update(user.token,"orders",id,{status});}catch{}
     setOrders(p=>p.map(x=>x.id===id?{...x,status}:x));
@@ -907,30 +832,24 @@ function ListPage({orders,setOrders,products,user,onNav}){
     }
   }
   function handleReorder(o){ if(!window.confirm("새 발주를 진행하시겠습니까?")) return; try{localStorage.setItem("dworks_draft",JSON.stringify({items:o.items})); onNav("order");}catch{} }
-
   const boxCounts = {
     진행중: dateFiltered.filter(o=>!isArchived(o) && o.status !== "완료").length,
     완료: dateFiltered.filter(o=>!isArchived(o) && o.status === "완료").length,
     보관함: dateFiltered.filter(o=>isArchived(o)).length,
   };
-
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
         <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div><Tag ch={`${filtered.length}건`} c={C.sub}/>
       </div>
-
       <div style={{display:"flex",gap:7,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
         {["진행중","완료","보관함"].map(s=><button key={s} onClick={()=>{setBoxFilter(s);setFilter("전체");setOpen(null);}} style={{padding:"8px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${boxFilter===s?C.acc:C.bdr}`,background:boxFilter===s?C.acc+"18":"#fff",color:boxFilter===s?C.acc:C.sub2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{s}<span style={{fontSize:11,opacity:.9}}>{boxCounts[s]}</span></button>)}
       </div>
-
       <div style={{display:"flex",gap:7,marginBottom:dateFilter==="기간설정"?8:12,overflowX:"auto",paddingBottom:4}}>
         {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>setDateFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
       </div>
       {dateFilter==="기간설정"&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/><span style={{color:C.sub}}>-</span><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/></div>}
-
       <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{statusTabs.map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}</div>
-
       {filtered.length===0?<Empty icon="📋" text={boxFilter==="보관함"?"보관된 발주 내역이 없습니다":"조건에 맞는 발주 내역이 없습니다"}/>:filtered.map(o=>{
         const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);
         const isO=open===o.id;
@@ -946,7 +865,6 @@ function ListPage({orders,setOrders,products,user,onNav}){
               <span style={{color:C.sub,fontSize:12}}>{isO?"▲":"›"}</span>
             </div>
           </div>
-
           {isO&&<div onClick={e=>e.stopPropagation()}>
             <Divider/>
             {(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:j<(o.items||[]).length-1?`1px solid ${C.bdr}`:"none",fontSize:12,gap:8}}><span style={{fontWeight:600,flex:1}}>{p?.name}</span><span style={{whiteSpace:"nowrap"}}>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}
@@ -965,17 +883,14 @@ function ListPage({orders,setOrders,products,user,onNav}){
     </div>
   );
 }
-
 function VendorPage({vendors,setVendors,user}){
   const [sheet,setSheet]=useState(false);
   const [f,setF]=useState({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:"",memo:""});
   const [editId,setEditId]=useState(null);
   const [venSearch,setVenSearch]=useState("");
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
-
   function openAdd(){setF({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:"",memo:""});setEditId(null);setSheet(true);}
   function openEdit(v){setF({...v});setEditId(v.id);setSheet(true);}
-
   async function save(){
     if(!f.name || !f.tel || !f.address){alert("필수 항목 입력");return;}
     const dataToSave = {name: f.name, tel: f.tel, sub_tel: f.subTel || null, email: f.email, type: f.type, address: f.address, biz_no: f.bizNo || null, memo: f.memo || null};
@@ -993,11 +908,8 @@ function VendorPage({vendors,setVendors,user}){
     }catch(e){alert("네트워크 에러"); return;}
     setSheet(false);
   }
-
   async function del(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"vendors",id);}catch{}setVendors(vv=>vv.filter(x=>x.id!==id));}
-
   const filtered = vendors.filter(v=>match(v.name, venSearch)||match(v.tel, venSearch));
-
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}><div style={{fontWeight:900,fontSize:20}}>거래처 관리</div><Btn ch="+ 추가" sz="s" st={{padding:"7px 14px"}} onClick={openAdd}/></div>
@@ -1009,7 +921,7 @@ function VendorPage({vendors,setVendors,user}){
         <Field label="전화번호 (선택)"><TxtInp val={f.subTel} onChange={sf("subTel")} ph="02-000-0000" type="tel"/></Field>
         <Field label="거래처 주소" req><TxtInp val={f.address} onChange={sf("address")} ph="서울시 종로구 ..." /></Field>
         <Field label="사업자 등록번호"><TxtInp val={f.bizNo} onChange={sf("bizNo")} ph="000-00-00000" /></Field>
-        <Field label="이메일 (발주서 발송용)"><TxtInp val={f.email} onChange={sf("email")} ph="order@fabric.com" type="email"/></Field>
+        <Field label="이메일 (선택)"><TxtInp val={f.email} onChange={sf("email")} ph="order@fabric.com" type="email"/></Field>
         <Field label="업체 유형"><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VEN_TYPES.map(t=>{const act=f.type===t;return<button key={t} onClick={()=>sf("type")(t)} style={{padding:"7px 13px",borderRadius:20,border:`1.5px solid ${act?(VEN_C[t]||C.acc):C.bdr}`,background:act?(VEN_C[t]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:4}}>{VEN_IC[t]} {t}</button>;})}</div></Field>
         <Field label="메모"><div style={{border:`1px solid ${C.bdr}`,borderRadius:8,background:"#fff"}}><textarea value={f.memo||""} onChange={e=>sf("memo")(e.target.value)} placeholder="최소 수량, 결제 조건, 응대 메모 등을 입력하세요" style={{width:"100%",minHeight:88,border:"none",outline:"none",resize:"vertical",padding:"12px 14px",fontSize:13,color:C.txt,fontFamily:C.fn,background:"transparent",boxSizing:"border-box"}}/></div></Field>
         <G/><div style={{display:"flex",gap:10}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={save}/></div>
@@ -1017,17 +929,14 @@ function VendorPage({vendors,setVendors,user}){
     </div>
   );
 }
-
 function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [facSheet,setFacSheet]=useState(null);
   const [profileSheet,setProfileSheet]=useState(false);
   const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||"",brand:user.brand||"",position:user.position||"",address:user.address||""});
-
   async function saveProfile(){
     try{if(user?.token) await DB.updateUser(user.token, {name:pf.name,company:pf.company,tel:pf.tel,brand:pf.brand,position:pf.position,address:pf.address});}catch{}
     if(setUser)setUser(u=>({...u,...pf})); setProfileSheet(false); alert("저장되었습니다!");
   }
-
   async function saveFac(){
     if(!facSheet.name)return;
     const{id,...data}=facSheet;
@@ -1045,7 +954,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
     setFacSheet(null);
   }
   async function delFac(id){if(!window.confirm("삭제?"))return;if(user?.token)try{await DB.del(user.token,"factories",id);}catch{}setFactories(ff=>ff.filter(x=>x.id!==id));}
-
   return(
     <div style={{padding:"18px 14px 94px"}}>
       <Card st={{background:"linear-gradient(135deg,#101828 0%, #0F172A 55%, #1E293B 100%)",border:"none",color:"#fff",padding:20,marginBottom:16}}>
@@ -1068,7 +976,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
           <Btn ch="로그아웃" v="w" st={{color:"#fff",background:"transparent",border:"1px solid rgba(255,255,255,0.12)",boxShadow:"none"}} onClick={onLogout}/>
         </div>
       </Card>
-
       <Card>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={{fontWeight:900,fontSize:15,color:C.txt}}>공장 관리</div>
@@ -1094,7 +1001,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
           </div>
         </div>)}
       </Card>
-
       {profileSheet&&<Sheet title="프로필 수정" onClose={()=>setProfileSheet(false)}>
         <Field label="업체명"><TxtInp val={pf.company} onChange={v=>setPf(p=>({...p,company:v}))} ph="회사명"/></Field>
         <Field label="브랜드명"><TxtInp val={pf.brand} onChange={v=>setPf(p=>({...p,brand:v}))} ph="브랜드명"/></Field>
@@ -1104,7 +1010,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
         <Field label="주소"><TxtInp val={pf.address} onChange={v=>setPf(p=>({...p,address:v}))} ph="주소"/></Field>
         <div style={{display:"flex",gap:10,marginTop:8}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setProfileSheet(false)}/><Btn ch="저장" full st={{flex:2}} onClick={saveProfile}/></div>
       </Sheet>}
-
       {facSheet&&<Sheet title={facSheet.id?"공장 수정":"공장 추가"} onClose={()=>setFacSheet(null)}>
         <Field label="공장명" req><TxtInp val={facSheet.name} onChange={v=>setFacSheet(p=>({...p,name:v}))} ph="공장명"/></Field>
         <Field label="업종"><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{BIZ_TYPES.map(t=>{const act=(facSheet.bizType||"")===t;return <button key={t} onClick={()=>setFacSheet(p=>({...p,bizType:t}))} style={{padding:"9px 13px",borderRadius:999,border:`1px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div></Field>
@@ -1118,7 +1023,6 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
     </div>
   );
 }
-
 // ── 메인 앱 컴포넌트 ──
 export default function App(){
   const [screen,setScreen]=useState("loading");
@@ -1129,7 +1033,6 @@ export default function App(){
   const [products,setProducts]=useState([]);
   const [orders,setOrders]=useState([]);
   const [loading,setLoading]=useState(false);
-
   async function loadData(token){
     setLoading(true);
     try{
@@ -1141,7 +1044,6 @@ export default function App(){
     }catch(e){setScreen("auth");}
     finally{setLoading(false);}
   }
-
   useEffect(()=>{
     async function checkSession(){
       try{
@@ -1158,7 +1060,6 @@ export default function App(){
     }
     checkSession();
   },[]);
-
   async function handleLogin(u, keep){
     if(keep) {
       try{localStorage.setItem("dworks_session",JSON.stringify(u));}catch{}
@@ -1167,18 +1068,14 @@ export default function App(){
     }
     setUser(u);setScreen("app");await loadData(u.token);
   }
-
   async function handleLogout(){
     try{localStorage.removeItem("dworks_session");}catch{}
     setUser(null);setScreen("auth");
   }
-
   const TABS=[{k:"order", l:"발주하기"},{k:"prods", l:"상품"},{k:"list", l:"발주내역"},{k:"vendors", l:"거래처"},{k:"settings", l:"설정"}];
-
   if(screen==="loading")return<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:C.fn,color:C.sub2}}>로딩 중...</div>;
   if(screen==="splash")return<SplashPage onStart={()=>setScreen("auth")}/>;
   if(screen!=="app"||!user)return<AuthPage onLogin={handleLogin}/>;
-
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
     order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
@@ -1187,7 +1084,6 @@ export default function App(){
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
     settings:<SettingsPage user={user} setUser={setUser} vendors={vendors} factories={factories} setFactories={setFactories} onLogout={handleLogout}/>,
   };
-
   return(
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.fn,maxWidth:480,margin:"0 auto",position:"relative",boxShadow:"0 18px 50px rgba(15,23,42,0.10)"}}>
       <div style={{background:"rgba(255,255,255,0.92)",padding:"18px 16px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`,backdropFilter:"blur(16px)"}}>
@@ -1200,7 +1096,6 @@ export default function App(){
         </div>
       </div>
       <div style={{paddingBottom:96}}>{pages[page]||pages["dash"]}</div>
-
       <div style={{position:"fixed",bottom:14,left:"50%",transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:456,background:"rgba(255,255,255,0.94)",border:`1px solid ${C.bdr}`,display:"flex",zIndex:60,height:72,borderRadius:28,boxShadow:"0 18px 40px rgba(15,23,42,0.10)",backdropFilter:"blur(16px)",padding:8,boxSizing:"border-box"}}>
         {TABS.map(t=><button key={t.k} onClick={()=>setPage(t.k)} style={{
           flex:1,
