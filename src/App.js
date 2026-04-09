@@ -298,6 +298,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [step,setStep]=useState(1);
   const [items,setItems]=useState([]);
   const [memo,setMemo]=useState("");
+  const [vendorMemos,setVendorMemos]=useState({});
   const [search,setSearch]=useState("");
   const [selProd,setSelProd]=useState(null);
   const [selColor,setSelColor]=useState("");
@@ -310,6 +311,38 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
+
+  function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
+    const companyName = user?.company || "디자인워커스";
+    let body = `[D-Works 발주서]\n`;
+    body += `${vendor.name} 담당자님 안녕하세요.\n\n`;
+    body += `업체명: ${companyName}\n\n`;
+
+    Object.values(groupedProducts).forEach(product => {
+      body += `■ 상품명: ${product.productName}\n`;
+      product.lines.forEach((line, idx) => {
+        body += `${idx + 1}. ${line.mat}\n`;
+        body += `   - 컬러: ${line.color}\n`;
+        body += `   - 수량: ${fmtN(line.soyo)}${line.unit}\n`;
+      });
+      body += `\n`;
+    });
+
+    const firstProduct = Object.values(groupedProducts)[0];
+    body += `■ 입고처\n`;
+    body += `${firstProduct?.factory || "-"}\n`;
+    body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}\n`;
+    body += `연락처: ${firstProduct?.factoryTel || "-"}\n`;
+
+    if (memo || vendorMemoText) {
+      body += `\n■ 요청 및 전달사항\n`;
+      if (memo) body += `[공통]\n${memo}\n`;
+      if (vendorMemoText) body += `${memo ? `\n` : ``}[업체별]\n${vendorMemoText}\n`;
+    }
+
+    body += `\n감사합니다.\nD-Works`;
+    return body;
+  }
 
   function generatePreview() {
     if (!items.length) {
@@ -354,38 +387,28 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       alert("발송할 거래처가 없습니다.");
       return;
     }
-    const companyName = user?.company || "디자인워커스";
     const pData = targets.map(({ vendor, products: groupedProducts }) => {
-      let body = `[D-Works 발주서]\n`;
-      body += `${vendor.name} 담당자님 안녕하세요.\n\n`;
-      body += `업체명: ${companyName}\n\n`;
-      Object.values(groupedProducts).forEach(product => {
-        body += `■ 상품명: ${product.productName}\n`;
-        product.lines.forEach((line, idx) => {
-          body += `${idx + 1}. ${line.mat}\n`;
-          body += `   - 컬러: ${line.color}\n`;
-          body += `   - 수량: ${fmtN(line.soyo)}${line.unit}\n`;
-        });
-        body += `\n`;
-      });
-      const firstProduct = Object.values(groupedProducts)[0];
-      body += `■ 입고처\n`;
-      body += `${firstProduct?.factory || "-"}\n`;
-      body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}\n`;
-      body += `연락처: ${firstProduct?.factoryTel || "-"}\n`;
-      if (memo) {
-        body += `\n■ 요청 및 전달사항\n${memo}\n`;
-      }
-      body += `\n감사합니다.\nD-Works`;
+      const vendorMemoText = vendorMemos[vendor.id] || "";
       return {
         vendor,
         groupedProducts,
-        body
+        vendorMemo: vendorMemoText,
+        body: buildOrderBody({ vendor, groupedProducts, vendorMemoText })
       };
     });
     setPreviewData(pData);
     setShowPreview(true);
   }
+
+  function handleVendorMemoChange(vendorId, value) {
+    setVendorMemos(prev => ({ ...prev, [vendorId]: value }));
+    setPreviewData(prev => prev.map(d => {
+      if (d.vendor.id !== vendorId) return d;
+      const nextBody = buildOrderBody({ vendor: d.vendor, groupedProducts: d.groupedProducts, vendorMemoText: value });
+      return { ...d, vendorMemo: value, body: nextBody };
+    }));
+  }
+
   async function confirmOrder() {
     setSending(true);
     const groupedByPid = items.reduce((acc, it) => { if(!acc[it.pid]) acc[it.pid] = []; acc[it.pid].push(it); return acc; }, {});
@@ -405,7 +428,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setShowPreview(false);
     setStep(3);
   }
-  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setPreviewData([]);setShowPreview(false);}
+
+  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setVendorMemos({});setPreviewData([]);setShowPreview(false);}
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
   return(
     <div style={{padding:"14px 14px 80px"}}>
@@ -421,7 +445,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         </Card>
         <Btn ch="+ 발주 리스트에 추가" full onClick={addItem} disabled={!selProd||!selColor||!qty} st={{marginBottom:18}}/>
         <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 리스트</div>
-
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
             const p=products.find(x=>x.id===it.pid);
@@ -445,7 +468,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
           {items.map((it,i)=>{const p=products.find(x=>x.id===it.pid);return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${C.bdr}`}}><div><div style={{fontWeight:700,fontSize:13}}>{p?.name}</div><div style={{color:C.sub,fontSize:11,marginTop:2}}>{it.color} · {p?.factory}</div></div><span style={{fontWeight:800,color:C.acc,fontSize:15}}>{fmtN(it.qty)}장</span></div>;})}
           <div style={{display:"flex",justifyContent:"space-between",paddingTop:10}}><span style={{fontWeight:700,fontSize:13}}>총 수량</span><span style={{fontWeight:900,color:C.acc,fontSize:17}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span></div>
         </Card>
-        <div style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:13,marginBottom:8,color:C.txt}}>전달사항 (선택)</div><textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="예: 소량 발주건으로 10야드는 본사로, 나머지는 공장으로 배송 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"80px",boxSizing:"border-box"}}/></div>
+        <div style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:13,marginBottom:8,color:C.txt}}>공통 전달사항 (선택)</div><textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="예: 소량 발주건으로 10야드는 본사로, 나머지는 공장으로 배송 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"80px",boxSizing:"border-box"}}/></div>
         <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch={"발주 미리보기"} full st={{flex:2}} onClick={generatePreview} /></div>
       </>}
       {showPreview && (
@@ -525,10 +548,19 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                   <div>연락처 : {Object.values(d.groupedProducts)[0]?.factoryTel || "-"}</div>
                   {memo && (
                     <>
-                      <div style={{ marginTop: 8, fontWeight: 700, color: C.txt }}>[요청 및 전달사항]</div>
+                      <div style={{ marginTop: 8, fontWeight: 700, color: C.txt }}>[공통 전달사항]</div>
                       <div style={{ whiteSpace: "pre-wrap" }}>{memo}</div>
                     </>
                   )}
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginBottom: 8 }}>업체별 메모 (선택)</div>
+                  <textarea
+                    value={vendorMemos[d.vendor.id] || ""}
+                    onChange={e => handleVendorMemoChange(d.vendor.id, e.target.value)}
+                    placeholder="이 거래처에만 전달할 별도 요청사항을 입력하세요"
+                    style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"78px",boxSizing:"border-box"}}
+                  />
                 </div>
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                   <Btn
@@ -546,8 +578,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     </div>
   );
 }
-
-// Remaining components kept as original...
 
 function ProdsPage({products,setProducts,vendors,factories,user}){
   const [catF,setCatF]=useState("전체");
