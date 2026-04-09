@@ -306,10 +306,44 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [sending,setSending]=useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
+  const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
 
   const DRAFT="dworks_draft";
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
+  const recentOrders = [...orders]
+    .filter(o => !o?.is_archived && Array.isArray(o?.items) && o.items.length > 0)
+    .sort((a,b)=>new Date(b.ts||b.date||0)-new Date(a.ts||a.date||0))
+    .slice(0,3);
+
+  function getOrderSummary(order){
+    const names = Array.from(new Set((order.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-")));
+    const totalQty = (order.items||[]).reduce((s,it)=>s+(it.qty||0),0);
+    return {
+      title: names.join(", "),
+      totalQty,
+      itemCount: (order.items||[]).length,
+    };
+  }
+
+  function loadRecentOrder(order){
+    const draftItems = (order.items||[]).map(it=>({pid:it.pid,color:it.color,qty:Number(it.qty)||0}));
+    setItems(draftItems);
+    setSearch("");
+    setSelProd(null);
+    setSelColor("");
+    setQty("");
+    setStep(1);
+    setLoadedRecentInfo({
+      orderId: order.id,
+      date: order.date,
+      summary: getOrderSummary(order),
+    });
+    try{
+      localStorage.setItem(DRAFT, JSON.stringify({items:draftItems}));
+    }catch{}
+    alert("최근 발주를 불러왔습니다. 수량/색상 수정 후 다시 발주할 수 있습니다.");
+  }
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
 
   function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
@@ -429,13 +463,35 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setStep(3);
   }
 
-  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setVendorMemos({});setPreviewData([]);setShowPreview(false);}
+  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setVendorMemos({});setPreviewData([]);setShowPreview(false);setLoadedRecentInfo(null);}
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{fontWeight:900,fontSize:20,marginBottom:4}}>{step===1?"발주 입력":"발주서 확인"}</div>
       <div style={{color:C.sub,fontSize:12,marginBottom:14}}>기본 정보를 입력해 주세요</div>
       <StepBar cur={step-1}/>
+      {step===1&&recentOrders.length>0&&<Card st={{marginBottom:14,background:"#FFF",border:`1px solid ${C.bdr}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontWeight:800,fontSize:13,color:C.txt}}>최근 발주 빠른 불러오기</div>
+          <Tag ch={`${recentOrders.length}건`} c={C.sub2}/>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {recentOrders.map((ro,idx)=>{
+            const s=getOrderSummary(ro);
+            return <div key={ro.id||idx} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,padding:"10px 12px",border:`1px solid ${C.bdr}`,borderRadius:14,background:"#F8FAFC"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:800,color:C.txt,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.title}</div>
+                <div style={{fontSize:11,color:C.sub2,marginTop:4}}>{ro.date||"-"} · 품목 {s.itemCount}개 · 총 {fmtN(s.totalQty)}장</div>
+              </div>
+              <Btn ch="불러오기" v="w" sz="s" onClick={()=>loadRecentOrder(ro)} st={{flexShrink:0}}/>
+            </div>
+          })}
+        </div>
+      </Card>}
+      {step===1&&loadedRecentInfo&&items.length>0&&<div style={{marginBottom:12,padding:"12px 14px",background:"#EEF2FF",border:`1px solid #C7D2FE`,borderRadius:14}}>
+        <div style={{fontSize:12,fontWeight:800,color:C.acc}}>최근 발주를 불러왔습니다</div>
+        <div style={{fontSize:11,color:C.sub2,marginTop:4}}>{loadedRecentInfo.date||"-"} · {loadedRecentInfo.summary?.title||"-"} · 총 {fmtN(loadedRecentInfo.summary?.totalQty||0)}장</div>
+      </div>}
       {step===1&&<>
         <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 추가</div>
         <Card st={{marginBottom:12}}>
