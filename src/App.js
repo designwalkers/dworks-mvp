@@ -1,5 +1,91 @@
 import React, { useState, useEffect } from "react";
 
+
+// ── Kakao Share ───────────────────────────────────────────────
+const KAKAO_JS_KEY = "5acd9965b0d4d4b0cb81f45a8b3d53d7";
+
+function loadKakaoSdk() {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined") {
+      reject(new Error("window 객체를 찾을 수 없습니다."));
+      return;
+    }
+
+    if (window.Kakao) {
+      if (!window.Kakao.isInitialized()) {
+        window.Kakao.init(KAKAO_JS_KEY);
+      }
+      resolve(window.Kakao);
+      return;
+    }
+
+    const existing = document.querySelector('script[src="https://developers.kakao.com/sdk/js/kakao.min.js"]');
+    if (existing) {
+      existing.addEventListener("load", () => {
+        if (!window.Kakao) {
+          reject(new Error("Kakao SDK 로드 실패"));
+          return;
+        }
+        if (!window.Kakao.isInitialized()) {
+          window.Kakao.init(KAKAO_JS_KEY);
+        }
+        resolve(window.Kakao);
+      });
+      existing.addEventListener("error", () => reject(new Error("Kakao SDK 스크립트 로드 실패")));
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = "https://developers.kakao.com/sdk/js/kakao.min.js";
+    script.async = true;
+
+    script.onload = () => {
+      if (!window.Kakao) {
+        reject(new Error("Kakao SDK 로드 실패"));
+        return;
+      }
+      if (!window.Kakao.isInitialized()) {
+        window.Kakao.init(KAKAO_JS_KEY);
+      }
+      resolve(window.Kakao);
+    };
+
+    script.onerror = () => reject(new Error("Kakao SDK 스크립트 로드 실패"));
+    document.body.appendChild(script);
+  });
+}
+
+async function shareKakaoOrder({ vendorName, body }) {
+  try {
+    const Kakao = await loadKakaoSdk();
+
+    Kakao.Share.sendDefault({
+      objectType: "feed",
+      content: {
+        title: `[D-Works 발주서] ${vendorName}`,
+        description: body.length > 180 ? body.slice(0, 180) + "..." : body,
+        imageUrl: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?auto=format&fit=crop&w=1200&q=80",
+        link: {
+          mobileWebUrl: window.location.href,
+          webUrl: window.location.href,
+        },
+      },
+      buttons: [
+        {
+          title: "디웍스 열기",
+          link: {
+            mobileWebUrl: window.location.href,
+            webUrl: window.location.href,
+          },
+        },
+      ],
+    });
+  } catch (e) {
+    alert("카카오톡 공유 실행 중 오류가 발생했습니다.");
+    console.error(e);
+  }
+}
+
 // ── Supabase & API (기존 유지) ─────────────────────────────────
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
@@ -276,6 +362,9 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [sending,setSending]=useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
+  useEffect(() => {
+    loadKakaoSdk().catch(() => {});
+  }, []);
   
   const DRAFT="dworks_draft";
   useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
@@ -393,6 +482,16 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
               <div key={i} style={{ marginBottom: 16, border: `1px solid ${C.bdr}`, borderRadius: 10, padding: 14, background: "#fff", boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                 <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10, color: C.acc, borderBottom: `1px dashed ${C.bdr}`, paddingBottom: 8 }}>📧 받는 사람: {d.vendor.name} <span style={{fontWeight:500, color:C.sub}}>({d.vendor.email})</span></div>
                 <div style={{ fontSize: 12, whiteSpace: "pre-wrap", lineHeight: 1.6, color: C.txt }}>{d.body}</div>
+                <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                  <Btn
+                    ch="카카오톡으로 보내기"
+                    full
+                    onClick={() => shareKakaoOrder({
+                      vendorName: d.vendor.name,
+                      body: d.body
+                    })}
+                  />
+                </div>
               </div>
             ))}
           </div>
