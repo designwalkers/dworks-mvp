@@ -1303,7 +1303,7 @@ export default function App(){
     <div style={{minHeight:"100vh",background:C.bg,fontFamily:C.fn,maxWidth:480,margin:"0 auto",position:"relative",boxShadow:"0 18px 50px rgba(15,23,42,0.10)"}}>
       <div style={{background:"rgba(255,255,255,0.92)",padding:"18px 16px 14px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"sticky",top:0,zIndex:50,borderBottom:`1px solid ${C.bdr}`,backdropFilter:"blur(16px)"}}>
         <div>
-          <div style={{fontSize:11,color:C.sub,fontWeight:900,letterSpacing:"0.24em",textTransform:"uppercase"}}>DESIGN WALKKERS</div>
+          <div style={{fontSize:11,color:C.sub,fontWeight:900,letterSpacing:"0.24em",textTransform:"uppercase"}}>DESIGN WALKERS</div>
           <button onClick={()=>setPage("dash")} style={{marginTop:6,background:"none",border:"none",padding:0,color:C.acc,fontWeight:900,fontSize:20,cursor:"pointer",fontFamily:C.fn,letterSpacing:"-0.02em"}}>D-Works</button>
         </div>
         <div style={{padding:"12px 16px",borderRadius:18,border:`1px solid ${C.bdr}`,background:"#fff",fontSize:14,fontWeight:900,color:C.sub2,boxShadow:"0 6px 18px rgba(15,23,42,0.04)"}}>
