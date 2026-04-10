@@ -307,9 +307,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
   const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
-
   const DRAFT="dworks_draft";
-  useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
   const recentOrders = [...orders]
     .filter(o => !o?.is_archived && Array.isArray(o?.items) && o.items.length > 0)
@@ -890,6 +888,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 }
 
 // 🚀 발주 리스트 🚀
+
 function ListPage({orders,setOrders,products,user,onNav}){
   const [boxFilter,setBoxFilter]=useState("진행중");
   const [filter,setFilter]=useState("전체");
@@ -897,17 +896,24 @@ function ListPage({orders,setOrders,products,user,onNav}){
   const [startDate,setStartDate]=useState("");
   const [endDate,setEndDate]=useState("");
   const [open,setOpen]=useState(null);
+  const [selectionMode,setSelectionMode]=useState(false);
+  const [selectedIds,setSelectedIds]=useState([]);
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
+
   function isArchived(order){ return !!order?.is_archived; }
+  function exitSelectionMode(){ setSelectionMode(false); setSelectedIds([]); setOpen(null); }
+  function toggleSelectOne(id){ setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
+
   const getPastDate = (days) => {
     const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0,10);
   };
-  const tToday = today(), tYest = getPastDate(1), tWeek = getPastDate(7);
-  let dateFiltered = orders;
-  if (dateFilter === "오늘") dateFiltered = orders.filter(o => o.date === tToday);
-  else if (dateFilter === "어제") dateFiltered = orders.filter(o => o.date === tYest);
-  else if (dateFilter === "1주일") dateFiltered = orders.filter(o => o.date >= tWeek && o.date <= tToday);
-  else if (dateFilter === "기간설정") {
+  const tToday=today(), tYest=getPastDate(1), tWeek=getPastDate(7);
+
+  let dateFiltered=orders;
+  if (dateFilter==="오늘") dateFiltered=orders.filter(o=>o.date===tToday);
+  else if (dateFilter==="어제") dateFiltered=orders.filter(o=>o.date===tYest);
+  else if (dateFilter==="1주일") dateFiltered=orders.filter(o=>o.date>=tWeek&&o.date<=tToday);
+  else if (dateFilter==="기간설정") {
     dateFiltered = orders.filter(o => {
       if(startDate && endDate) return o.date >= startDate && o.date <= endDate;
       if(startDate) return o.date >= startDate;
@@ -915,91 +921,179 @@ function ListPage({orders,setOrders,products,user,onNav}){
       return true;
     });
   }
-  let base = dateFiltered.filter(o => {
-    const archived = isArchived(o);
-    if(boxFilter === "보관함") return archived;
+
+  let base = dateFiltered.filter(o=>{
+    const archived=isArchived(o);
+    if(boxFilter==="보관함") return archived;
     if(archived) return false;
-    if(boxFilter === "완료") return o.status === "완료";
-    return o.status !== "완료";
+    if(boxFilter==="완료") return o.status==="완료";
+    return o.status!=="완료";
   });
-  const statusTabs = boxFilter === "진행중" ? ["전체","진행중","지연"] : boxFilter === "완료" ? ["전체","완료"] : ["전체","진행중","완료","지연"];
+
+  const statusTabs = boxFilter==="진행중" ? ["전체","진행중","지연"] : boxFilter==="완료" ? ["전체","완료"] : ["전체","진행중","완료","지연"];
   const filtered=(filter==="전체"?base:base.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
+
+  const boxCounts = {
+    진행중: dateFiltered.filter(o=>!isArchived(o) && o.status!=="완료").length,
+    완료: dateFiltered.filter(o=>!isArchived(o) && o.status==="완료").length,
+    보관함: dateFiltered.filter(o=>isArchived(o)).length,
+  };
+
+  function selectAllFiltered(){ setSelectedIds(filtered.map(o=>o.id)); }
+  function clearSelection(){ setSelectedIds([]); }
+
   async function changeStatus(id,status){
-    if(user?.token)try{await DB.update(user.token,"orders",id,{status});}catch{}
-    setOrders(p=>p.map(x=>x.id===id?{...x,status}:x));
-    if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null); exitSelectionMode();
+    if(user?.token) try{ await DB.update(user.token,"orders",id,{status}); }catch{}
+    setOrders(prev=>prev.map(x=>x.id===id?{...x,status}:x));
+    if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null);
   }
+
   async function archiveOrder(id){
     if(!window.confirm("목록에서 보관하시겠습니까? 데이터는 삭제되지 않습니다.")) return;
     try{
-      if(user?.token) await DB.update(user.token,"orders",id,{is_archived:true,archived_at:new Date().toISOString()});
-      setOrders(p=>p.map(x=>x.id===id?{...x,is_archived:true,archived_at:new Date().toISOString()}:x));
+      const archivedAt=new Date().toISOString();
+      if(user?.token) await DB.update(user.token,"orders",id,{is_archived:true,archived_at:archivedAt});
+      setOrders(prev=>prev.map(x=>x.id===id?{...x,is_archived:true,archived_at:archivedAt}:x));
       if(open===id) setOpen(null);
-    }catch(e){
-      alert("보관 처리에 실패했습니다.");
-    }
+    }catch(e){ alert("보관 처리에 실패했습니다."); }
   }
+
   async function unarchiveOrder(id){
     try{
       if(user?.token) await DB.update(user.token,"orders",id,{is_archived:false,archived_at:null});
-      setOrders(p=>p.map(x=>x.id===id?{...x,is_archived:false,archived_at:null}:x));
+      setOrders(prev=>prev.map(x=>x.id===id?{...x,is_archived:false,archived_at:null}:x));
       if(open===id) setOpen(null);
-    }catch(e){
-      alert("보관 해제에 실패했습니다.");
-    }
+    }catch(e){ alert("보관 해제에 실패했습니다."); }
   }
+
+  async function bulkChangeStatus(status){
+    if(selectedIds.length===0){ alert("선택한 발주가 없습니다."); return; }
+    if(!window.confirm(`선택한 ${selectedIds.length}건을 ${status} 처리하시겠습니까?`)) return;
+    try{
+      if(user?.token){
+        for(const id of selectedIds){
+          await DB.update(user.token,"orders",id,{status});
+        }
+      }
+      setOrders(prev=>prev.map(o=>selectedIds.includes(o.id)?{...o,status}:o));
+      exitSelectionMode();
+    }catch(e){ alert("일괄 상태 변경에 실패했습니다."); }
+  }
+
+  async function bulkArchive(){
+    if(selectedIds.length===0){ alert("선택한 발주가 없습니다."); return; }
+    if(!window.confirm(`선택한 ${selectedIds.length}건을 보관하시겠습니까?`)) return;
+    try{
+      const archivedAt=new Date().toISOString();
+      if(user?.token){
+        for(const id of selectedIds){
+          await DB.update(user.token,"orders",id,{is_archived:true,archived_at:archivedAt});
+        }
+      }
+      setOrders(prev=>prev.map(o=>selectedIds.includes(o.id)?{...o,is_archived:true,archived_at:archivedAt}:o));
+      exitSelectionMode();
+    }catch(e){ alert("일괄 보관에 실패했습니다."); }
+  }
+
+  async function bulkUnarchive(){
+    if(selectedIds.length===0){ alert("선택한 발주가 없습니다."); return; }
+    if(!window.confirm(`선택한 ${selectedIds.length}건을 보관 해제하시겠습니까?`)) return;
+    try{
+      if(user?.token){
+        for(const id of selectedIds){
+          await DB.update(user.token,"orders",id,{is_archived:false,archived_at:null});
+        }
+      }
+      setOrders(prev=>prev.map(o=>selectedIds.includes(o.id)?{...o,is_archived:false,archived_at:null}:o));
+      exitSelectionMode();
+    }catch(e){ alert("일괄 보관 해제에 실패했습니다."); }
+  }
+
   function handleReorder(o){ if(!window.confirm("새 발주를 진행하시겠습니까?")) return; try{localStorage.setItem("dworks_draft",JSON.stringify({items:o.items})); onNav("order");}catch{} }
-  const boxCounts = {
-    진행중: dateFiltered.filter(o=>!isArchived(o) && o.status !== "완료").length,
-    완료: dateFiltered.filter(o=>!isArchived(o) && o.status === "완료").length,
-    보관함: dateFiltered.filter(o=>isArchived(o)).length,
-  };
+
   return(
     <div style={{padding:"14px 14px 80px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div><Tag ch={`${filtered.length}건`} c={C.sub}/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div>
+          <Tag ch={`${filtered.length}건`} c={C.sub}/>
+        </div>
+        <Btn ch={selectionMode?"선택 취소":"선택"} v="w" sz="s" onClick={()=>selectionMode?exitSelectionMode():setSelectionMode(true)}/>
       </div>
+
+      {selectionMode&&<Card st={{marginBottom:12,padding:12,borderRadius:18}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <div style={{fontSize:13,fontWeight:800,color:C.txt}}>선택 {selectedIds.length}건</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Btn ch="전체 선택" v="w" sz="s" onClick={selectAllFiltered}/>
+            <Btn ch="전체 해제" v="w" sz="s" onClick={clearSelection}/>
+          </div>
+        </div>
+      </Card>}
+
       <div style={{display:"flex",gap:7,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
-        {["진행중","완료","보관함"].map(s=><button key={s} onClick={()=>{setBoxFilter(s);setFilter("전체");setOpen(null);}} style={{padding:"8px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${boxFilter===s?C.acc:C.bdr}`,background:boxFilter===s?C.acc+"18":"#fff",color:boxFilter===s?C.acc:C.sub2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{s}<span style={{fontSize:11,opacity:.9}}>{boxCounts[s]}</span></button>)}
+        {["진행중","완료","보관함"].map(s=><button key={s} onClick={()=>{setBoxFilter(s);setFilter("전체");exitSelectionMode();}} style={{padding:"8px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${boxFilter===s?C.acc:C.bdr}`,background:boxFilter===s?C.acc+"18":"#fff",color:boxFilter===s?C.acc:C.sub2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{s}<span style={{fontSize:11,opacity:.9}}>{boxCounts[s]}</span></button>)}
       </div>
+
       <div style={{display:"flex",gap:7,marginBottom:dateFilter==="기간설정"?8:12,overflowX:"auto",paddingBottom:4}}>
-        {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>setDateFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
+        {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>{setDateFilter(s);exitSelectionMode();}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
       </div>
+
       {dateFilter==="기간설정"&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/><span style={{color:C.sub}}>-</span><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/></div>}
-      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>{statusTabs.map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}</div>
+
+      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>
+        {statusTabs.map(s=><button key={s} onClick={()=>{setFilter(s);exitSelectionMode();}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
+      </div>
+
       {filtered.length===0?<Empty icon="📋" text={boxFilter==="보관함"?"보관된 발주 내역이 없습니다":"조건에 맞는 발주 내역이 없습니다"}/>:filtered.map(o=>{
         const tot=(o.items||[]).reduce((s,i)=>s+(i.qty||0),0);
         const isO=open===o.id;
+        const isSelected=selectedIds.includes(o.id);
         const title=Array.from(new Set((o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-"))).join(", ");
-        return <Card key={o.id} st={{marginBottom:10,cursor:"pointer"}} onClick={()=>setOpen(isO?null:o.id)}>
+        return <Card key={o.id} st={{marginBottom:10,cursor:"pointer",border:selectionMode&&isSelected?`1.5px solid ${C.acc}`:`1px solid ${C.bdr}`}} onClick={()=>{if(selectionMode)toggleSelectOne(o.id);else setOpen(isO?null:o.id);}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontWeight:800,fontSize:13,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
-              <div style={{color:C.sub,fontSize:11}}>{o.date} · 총 {fmtN(tot)}장 · 품목 {(o.items||[]).length}개</div>
+            <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
+              {selectionMode&&<input type="checkbox" checked={isSelected} onChange={()=>toggleSelectOne(o.id)} onClick={e=>e.stopPropagation()} style={{width:18,height:18,accentColor:C.acc,flexShrink:0}}/>}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontWeight:800,fontSize:13,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
+                <div style={{color:C.sub,fontSize:11}}>{o.date} · 총 {fmtN(tot)}장 · 품목 {(o.items||[]).length}개</div>
+              </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
               <Tag ch={o.status} c={SC[o.status]||C.sub}/>
-              <span style={{color:C.sub,fontSize:12}}>{isO?"▲":"›"}</span>
+              {!selectionMode&&<span style={{color:C.sub,fontSize:12}}>{isO?"▲":"›"}</span>}
             </div>
           </div>
-          {isO&&<div onClick={e=>e.stopPropagation()}>
+
+          {!selectionMode&&isO&&<div onClick={e=>e.stopPropagation()}>
             <Divider/>
             {(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:j<(o.items||[]).length-1?`1px solid ${C.bdr}`:"none",fontSize:12,gap:8}}><span style={{fontWeight:600,flex:1}}>{p?.name}</span><span style={{whiteSpace:"nowrap"}}>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}
             <div style={{display:"flex",gap:7,marginTop:10,flexWrap:"wrap"}}>
-              <Btn ch="🔄 재발주" sz="s" v="w" st={{padding:"5px 11px",fontSize:12,color:C.acc}} onClick={(e)=>{e.stopPropagation();handleReorder(o);}}/>
-              {boxFilter!=="보관함" && ["진행중","완료","지연"].map(st=><Btn key={st} ch={st} sz="s" st={{padding:"5px 11px",background:o.status===st?(SC[st]||C.acc):"#fff",color:o.status===st?"#fff":(SC[st]||C.sub2),border:`1.5px solid ${SC[st]||C.bdr}`,fontSize:12}} onClick={()=>changeStatus(o.id,st)}/>) }
+              <Btn ch="🔄 재발주" sz="s" v="w" st={{padding:"5px 11px",fontSize:12,color:C.acc}} onClick={e=>{e.stopPropagation();handleReorder(o);}}/>
+              {boxFilter!=="보관함"&&["진행중","완료","지연"].map(st=><Btn key={st} ch={st} sz="s" st={{padding:"5px 11px",background:o.status===st?(SC[st]||C.acc):"#fff",color:o.status===st?"#fff":(SC[st]||C.sub2),border:`1.5px solid ${SC[st]||C.bdr}`,fontSize:12}} onClick={()=>changeStatus(o.id,st)}/>)}
               {boxFilter!=="보관함"
                 ? <Btn ch="보관" sz="s" v="w" st={{marginLeft:"auto",color:C.warn,fontSize:12,padding:"5px 11px"}} onClick={()=>archiveOrder(o.id)}/>
                 : <Btn ch="보관 해제" sz="s" v="w" st={{marginLeft:"auto",color:C.acc,fontSize:12,padding:"5px 11px"}} onClick={()=>unarchiveOrder(o.id)}/>
               }
             </div>
-            {boxFilter!=="보관함" && <div style={{marginTop:8,fontSize:11,color:C.sub}}>보관하면 목록에서만 숨겨지고 데이터는 유지됩니다.</div>}
+            {boxFilter!=="보관함"&&<div style={{marginTop:8,fontSize:11,color:C.sub}}>보관하면 목록에서만 숨겨지고 데이터는 유지됩니다.</div>}
           </div>}
         </Card>;
       })}
+
+      {selectionMode&&filtered.length>0&&<div style={{position:"fixed",left:"50%",bottom:92,transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:456,background:"rgba(255,255,255,0.96)",border:`1px solid ${C.bdr}`,borderRadius:22,boxShadow:"0 18px 40px rgba(15,23,42,0.12)",backdropFilter:"blur(16px)",padding:12,boxSizing:"border-box",zIndex:70}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {boxFilter!=="보관함"&&filter!=="완료"&&<Btn ch="선택 완료" onClick={()=>bulkChangeStatus("완료")} st={{flex:1}}/>}
+          {boxFilter!=="보관함"
+            ? <Btn ch="선택 보관" v="w" onClick={bulkArchive} st={{flex:1}}/>
+            : <Btn ch="선택 보관 해제" v="w" onClick={bulkUnarchive} st={{flex:1}}/>
+          }
+        </div>
+      </div>}
     </div>
   );
 }
+
 function VendorPage({vendors,setVendors,user}){
   const [sheet,setSheet]=useState(false);
   const [f,setF]=useState({name:"",tel:"",subTel:"",email:"",type:"원단",address:"",bizNo:"",memo:""});
