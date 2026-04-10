@@ -309,7 +309,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
 
   const DRAFT="dworks_draft";
-  useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
   const recentOrders = [...orders]
     .filter(o => !o?.is_archived && Array.isArray(o?.items) && o.items.length > 0)
@@ -342,7 +341,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     try{
       localStorage.setItem(DRAFT, JSON.stringify({items:draftItems}));
     }catch{}
-    alert("최근 발주를 불러왔습니다. 수량/색상 수정 후 다시 발주할 수 있습니다.");
   }
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
 
@@ -529,8 +527,10 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       </>}
       {showPreview && (
         <Sheet title="발주 내용 최종 확인" onClose={() => setShowPreview(false)}>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>아래 내용을 거래처별로 확인한 뒤 카카오톡으로 보내거나 저장할 수 있습니다.</div>
-          <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16, paddingRight: 4 }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
+            아래 내용을 거래처별로 확인한 뒤 카카오톡으로 보내거나 저장할 수 있습니다.
+          </div>
+          <div style={{ maxHeight: "55vh", overflowY: "auto", marginBottom: 16, paddingRight: 4 }}>
             {previewData.map((d, i) => (
               <div
                 key={i}
@@ -560,6 +560,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                     </span>
                   )}
                 </div>
+
                 {Object.values(d.groupedProducts).map((product, pIdx) => (
                   <div key={pIdx} style={{ marginBottom: 14 }}>
                     <div style={{ fontWeight: 800, fontSize: 12, color: C.txt, marginBottom: 8 }}>
@@ -587,6 +588,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                     </div>
                   </div>
                 ))}
+
                 <div
                   style={{
                     fontSize: 11,
@@ -600,7 +602,9 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                 >
                   <div style={{ fontWeight: 700, color: C.txt, marginBottom: 6 }}>[입고처]</div>
                   <div>{Object.values(d.groupedProducts)[0]?.factory || "-"}</div>
-                  <div>주소 : {factories?.find(f => f.name === Object.values(d.groupedProducts)[0]?.factory)?.address || "-"}</div>
+                  <div>
+                    주소 : {factories?.find(f => f.name === Object.values(d.groupedProducts)[0]?.factory)?.address || "-"}
+                  </div>
                   <div>연락처 : {Object.values(d.groupedProducts)[0]?.factoryTel || "-"}</div>
                   {memo && (
                     <>
@@ -609,58 +613,48 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                     </>
                   )}
                 </div>
+
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginBottom: 8 }}>업체별 메모 (선택)</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginBottom: 8 }}>
+                    업체별 메모 (선택)
+                  </div>
                   <textarea
                     value={vendorMemos[d.vendor.id] || ""}
                     onChange={e => handleVendorMemoChange(d.vendor.id, e.target.value)}
                     placeholder="이 거래처에만 전달할 별도 요청사항을 입력하세요"
-                    style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"78px",boxSizing:"border-box"}}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      border: `1px solid ${C.bdr}`,
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontFamily: C.fn,
+                      outline: "none",
+                      resize: "vertical",
+                      minHeight: "78px",
+                      boxSizing: "border-box"
+                    }}
                   />
                 </div>
+
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                  <Btn
-                    ch="카카오톡으로 보내기"
-                    full
-                    onClick={() => openKakaoWithOrderText(d.body)}
-                  />
+                  <Btn ch="카카오톡으로 보내기" full onClick={() => openKakaoWithOrderText(d.body)} />
                 </div>
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 10 }}><Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} /><Btn ch={sending ? "저장 중..." : "최종 저장하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} /></div>
-        </Sheet>
 
-      {selectionMode && filtered.length > 0 && (
-        <div
-          style={{
-            position: "fixed",
-            left: "50%",
-            bottom: 92,
-            transform: "translateX(-50%)",
-            width: "calc(100% - 24px)",
-            maxWidth: 456,
-            background: "rgba(255,255,255,0.96)",
-            border: `1px solid ${C.bdr}`,
-            borderRadius: 22,
-            boxShadow: "0 18px 40px rgba(15,23,42,0.12)",
-            backdropFilter: "blur(16px)",
-            padding: 12,
-            boxSizing: "border-box",
-            zIndex: 70,
-          }}
-        >
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {boxFilter !== "보관함" && filter !== "완료" && (
-              <Btn ch="선택 완료" full={false} onClick={() => bulkChangeStatus("완료")} st={{ flex: 1 }} />
-            )}
-            {boxFilter !== "보관함" ? (
-              <Btn ch="선택 보관" v="w" full={false} onClick={bulkArchive} st={{ flex: 1 }} />
-            ) : (
-              <Btn ch="선택 보관 해제" v="w" full={false} onClick={bulkUnarchive} st={{ flex: 1 }} />
-            )}
+          <div style={{ display: "flex", gap: 10 }}>
+            <Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} />
+            <Btn
+              ch={sending ? "저장 중..." : "최종 저장하기"}
+              full
+              st={{ flex: 2, background: C.acc }}
+              onClick={confirmOrder}
+              disabled={sending}
+            />
           </div>
-        </div>
+        </Sheet>
       )}
     </div>
   );
@@ -1313,7 +1307,7 @@ export default function App(){
           <button onClick={()=>setPage("dash")} style={{marginTop:6,background:"none",border:"none",padding:0,color:C.acc,fontWeight:900,fontSize:20,cursor:"pointer",fontFamily:C.fn,letterSpacing:"-0.02em"}}>D-Works</button>
         </div>
         <div style={{padding:"12px 16px",borderRadius:18,border:`1px solid ${C.bdr}`,background:"#fff",fontSize:14,fontWeight:900,color:C.sub2,boxShadow:"0 6px 18px rgba(15,23,42,0.04)"}}>
-          {user.brand ? user.brand : (user.company||user.name)}
+          {user.company || "DESIGN WALKERS"}
         </div>
       </div>
       <div style={{paddingBottom:96}}>{pages[page]||pages["dash"]}</div>
