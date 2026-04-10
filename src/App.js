@@ -64,6 +64,7 @@ const VEN_C={원단:"#0F172A",안감:"#0F172A",단추:"#0F172A",지퍼:"#0F172A"
 const SEASONS=["26SS","26FW","25SS","25FW"];
 const MAT_TYPES=["메인원단","부속원단","단추","지퍼","안감","심지","기타"];
 const BIZ_TYPES=["다이마루","직기","니트","데님","기타"];
+const DASH_NOTICES=["최근 발주 빠른 불러오기 기능 추가","업체별 개별 메모 기능 추가","발주내역 일괄 선택/완료/보관 기능 추가"];
 
 // ── 공통 UI (기존 유지) ──
 const Btn=({ch,onClick,v="p",full,disabled,sz="m",st={}})=>{
@@ -259,6 +260,10 @@ function DashPage({orders,products,onNav}){
           <Tag ch={`미출고 ${delayed.length}건`} c="#FFFFFF" />
           <Tag ch={`월간 ${fmtN(mQ)}매`} c="#FFFFFF" />
         </div>
+      </Card>
+      <Card st={{marginBottom:14}}>
+        <div style={{fontSize:13,fontWeight:800,marginBottom:8,color:C.txt}}>📢 제작사 공지</div>
+        <div style={{fontSize:12,lineHeight:1.7,color:C.sub2}}>{DASH_NOTICES.map((n,i)=><div key={i}>• {n}</div>)}</div>
       </Card>
       <Card st={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -527,10 +532,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       </>}
       {showPreview && (
         <Sheet title="발주 내용 최종 확인" onClose={() => setShowPreview(false)}>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>
-            아래 내용을 거래처별로 확인한 뒤 카카오톡으로 보내거나 저장할 수 있습니다.
-          </div>
-          <div style={{ maxHeight: "55vh", overflowY: "auto", marginBottom: 16, paddingRight: 4 }}>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>아래 내용을 거래처별로 확인한 뒤 카카오톡으로 보내거나 저장할 수 있습니다.</div>
+          <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16, paddingRight: 4 }}>
             {previewData.map((d, i) => (
               <div
                 key={i}
@@ -554,13 +557,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                   }}
                 >
                   📦 받는 사람: {d.vendor.name}
-                  {d.vendor.tel && (
-                    <span style={{ fontWeight: 500, color: C.sub }}>
-                      {" "}({d.vendor.tel})
-                    </span>
-                  )}
+                  {d.vendor.tel && <span style={{ fontWeight: 500, color: C.sub }}> ({d.vendor.tel})</span>}
                 </div>
-
                 {Object.values(d.groupedProducts).map((product, pIdx) => (
                   <div key={pIdx} style={{ marginBottom: 14 }}>
                     <div style={{ fontWeight: 800, fontSize: 12, color: C.txt, marginBottom: 8 }}>
@@ -568,91 +566,42 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       {product.lines.map((line, lIdx) => (
-                        <div
-                          key={lIdx}
-                          style={{
-                            background: "#F8FAFC",
-                            border: `1px solid ${C.bdr}`,
-                            borderRadius: 8,
-                            padding: "8px 10px"
-                          }}
-                        >
-                          <div style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>
-                            {lIdx + 1}. {line.mat}
-                          </div>
-                          <div style={{ fontSize: 11, color: C.sub2, marginTop: 3 }}>
-                            {line.color} · {fmtN(line.soyo)}{line.unit}
-                          </div>
+                        <div key={lIdx} style={{background:"#F8FAFC",border:`1px solid ${C.bdr}`,borderRadius:8,padding:"8px 10px"}}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>{lIdx + 1}. {line.mat}</div>
+                          <div style={{ fontSize: 11, color: C.sub2, marginTop: 3 }}>{line.color} · {fmtN(line.soyo)}{line.unit}</div>
                         </div>
                       ))}
                     </div>
                   </div>
                 ))}
-
-                <div
-                  style={{
-                    fontSize: 11,
-                    color: C.sub2,
-                    background: "#F8FAFC",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                    border: `1px solid ${C.bdr}`,
-                    marginBottom: 12
-                  }}
-                >
+                <div style={{fontSize:11,color:C.sub2,background:"#F8FAFC",borderRadius:8,padding:"10px 12px",border:`1px solid ${C.bdr}`,marginBottom:12}}>
                   <div style={{ fontWeight: 700, color: C.txt, marginBottom: 6 }}>[입고처]</div>
                   <div>{Object.values(d.groupedProducts)[0]?.factory || "-"}</div>
-                  <div>
-                    주소 : {factories?.find(f => f.name === Object.values(d.groupedProducts)[0]?.factory)?.address || "-"}
-                  </div>
+                  <div>주소 : {factories?.find(f => f.name === Object.values(d.groupedProducts)[0]?.factory)?.address || "-"}</div>
                   <div>연락처 : {Object.values(d.groupedProducts)[0]?.factoryTel || "-"}</div>
-                  {memo && (
-                    <>
-                      <div style={{ marginTop: 8, fontWeight: 700, color: C.txt }}>[공통 전달사항]</div>
-                      <div style={{ whiteSpace: "pre-wrap" }}>{memo}</div>
-                    </>
-                  )}
+                  {memo && <>
+                    <div style={{ marginTop: 8, fontWeight: 700, color: C.txt }}>[공통 전달사항]</div>
+                    <div style={{ whiteSpace: "pre-wrap" }}>{memo}</div>
+                  </>}
                 </div>
-
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginBottom: 8 }}>
-                    업체별 메모 (선택)
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginBottom: 8 }}>업체별 메모 (선택)</div>
                   <textarea
                     value={vendorMemos[d.vendor.id] || ""}
                     onChange={e => handleVendorMemoChange(d.vendor.id, e.target.value)}
                     placeholder="이 거래처에만 전달할 별도 요청사항을 입력하세요"
-                    style={{
-                      width: "100%",
-                      padding: "12px",
-                      border: `1px solid ${C.bdr}`,
-                      borderRadius: 8,
-                      fontSize: 13,
-                      fontFamily: C.fn,
-                      outline: "none",
-                      resize: "vertical",
-                      minHeight: "78px",
-                      boxSizing: "border-box"
-                    }}
+                    style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"78px",boxSizing:"border-box"}}
                   />
                 </div>
-
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                   <Btn ch="카카오톡으로 보내기" full onClick={() => openKakaoWithOrderText(d.body)} />
                 </div>
               </div>
             ))}
           </div>
-
           <div style={{ display: "flex", gap: 10 }}>
             <Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} />
-            <Btn
-              ch={sending ? "저장 중..." : "최종 저장하기"}
-              full
-              st={{ flex: 2, background: C.acc }}
-              onClick={confirmOrder}
-              disabled={sending}
-            />
+            <Btn ch={sending ? "저장 중..." : "최종 저장하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} />
           </div>
         </Sheet>
       )}
@@ -1307,7 +1256,7 @@ export default function App(){
           <button onClick={()=>setPage("dash")} style={{marginTop:6,background:"none",border:"none",padding:0,color:C.acc,fontWeight:900,fontSize:20,cursor:"pointer",fontFamily:C.fn,letterSpacing:"-0.02em"}}>D-Works</button>
         </div>
         <div style={{padding:"12px 16px",borderRadius:18,border:`1px solid ${C.bdr}`,background:"#fff",fontSize:14,fontWeight:900,color:C.sub2,boxShadow:"0 6px 18px rgba(15,23,42,0.04)"}}>
-          {user.company || "DESIGN WALKERS"}
+          {user.company || "디자인워커스"}
         </div>
       </div>
       <div style={{paddingBottom:96}}>{pages[page]||pages["dash"]}</div>
