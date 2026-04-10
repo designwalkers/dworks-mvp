@@ -307,7 +307,9 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
   const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
+
   const DRAFT="dworks_draft";
+  useEffect(()=>{try{const d=localStorage.getItem(DRAFT);if(d){const dr=JSON.parse(d);if(dr.items?.length>0){setItems(dr.items);alert("이전 발주(또는 임시저장) 내역을 불러왔습니다.");}}}catch{};},[]);
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
   const recentOrders = [...orders]
     .filter(o => !o?.is_archived && Array.isArray(o?.items) && o.items.length > 0)
@@ -888,7 +890,6 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 }
 
 // 🚀 발주 리스트 🚀
-
 function ListPage({orders,setOrders,products,user,onNav}){
   const [boxFilter,setBoxFilter]=useState("진행중");
   const [filter,setFilter]=useState("전체");
@@ -903,26 +904,24 @@ function ListPage({orders,setOrders,products,user,onNav}){
   function isArchived(order){ return !!order?.is_archived; }
   function exitSelectionMode(){ setSelectionMode(false); setSelectedIds([]); setOpen(null); }
   function toggleSelectOne(id){ setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
+  function getPastDate(days){ const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().slice(0,10); }
 
-  const getPastDate = (days) => {
-    const d = new Date(); d.setDate(d.getDate() - days); return d.toISOString().slice(0,10);
-  };
   const tToday=today(), tYest=getPastDate(1), tWeek=getPastDate(7);
 
   let dateFiltered=orders;
-  if (dateFilter==="오늘") dateFiltered=orders.filter(o=>o.date===tToday);
-  else if (dateFilter==="어제") dateFiltered=orders.filter(o=>o.date===tYest);
-  else if (dateFilter==="1주일") dateFiltered=orders.filter(o=>o.date>=tWeek&&o.date<=tToday);
-  else if (dateFilter==="기간설정") {
-    dateFiltered = orders.filter(o => {
-      if(startDate && endDate) return o.date >= startDate && o.date <= endDate;
-      if(startDate) return o.date >= startDate;
-      if(endDate) return o.date <= endDate;
+  if(dateFilter==="오늘") dateFiltered=orders.filter(o=>o.date===tToday);
+  else if(dateFilter==="어제") dateFiltered=orders.filter(o=>o.date===tYest);
+  else if(dateFilter==="1주일") dateFiltered=orders.filter(o=>o.date>=tWeek&&o.date<=tToday);
+  else if(dateFilter==="기간설정"){
+    dateFiltered=orders.filter(o=>{
+      if(startDate&&endDate) return o.date>=startDate&&o.date<=endDate;
+      if(startDate) return o.date>=startDate;
+      if(endDate) return o.date<=endDate;
       return true;
     });
   }
 
-  let base = dateFiltered.filter(o=>{
+  let base=dateFiltered.filter(o=>{
     const archived=isArchived(o);
     if(boxFilter==="보관함") return archived;
     if(archived) return false;
@@ -930,12 +929,17 @@ function ListPage({orders,setOrders,products,user,onNav}){
     return o.status!=="완료";
   });
 
-  const statusTabs = boxFilter==="진행중" ? ["전체","진행중","지연"] : boxFilter==="완료" ? ["전체","완료"] : ["전체","진행중","완료","지연"];
+  const statusTabs=boxFilter==="진행중"
+    ? ["전체","진행중","지연"]
+    : boxFilter==="완료"
+      ? ["전체","완료"]
+      : ["전체","진행중","완료","지연"];
+
   const filtered=(filter==="전체"?base:base.filter(o=>o.status===filter)).sort((a,b)=>new Date(b.ts||0)-new Date(a.ts||0));
 
-  const boxCounts = {
-    진행중: dateFiltered.filter(o=>!isArchived(o) && o.status!=="완료").length,
-    완료: dateFiltered.filter(o=>!isArchived(o) && o.status==="완료").length,
+  const boxCounts={
+    진행중: dateFiltered.filter(o=>!isArchived(o)&&o.status!=="완료").length,
+    완료: dateFiltered.filter(o=>!isArchived(o)&&o.status==="완료").length,
     보관함: dateFiltered.filter(o=>isArchived(o)).length,
   };
 
@@ -945,7 +949,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
   async function changeStatus(id,status){
     if(user?.token) try{ await DB.update(user.token,"orders",id,{status}); }catch{}
     setOrders(prev=>prev.map(x=>x.id===id?{...x,status}:x));
-    if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null);
+    if(open===id&&status==="완료"&&boxFilter==="진행중") setOpen(null);
   }
 
   async function archiveOrder(id){
@@ -1009,7 +1013,13 @@ function ListPage({orders,setOrders,products,user,onNav}){
     }catch(e){ alert("일괄 보관 해제에 실패했습니다."); }
   }
 
-  function handleReorder(o){ if(!window.confirm("새 발주를 진행하시겠습니까?")) return; try{localStorage.setItem("dworks_draft",JSON.stringify({items:o.items})); onNav("order");}catch{} }
+  function handleReorder(o){
+    if(!window.confirm("새 발주를 진행하시겠습니까?")) return;
+    try{
+      localStorage.setItem("dworks_draft",JSON.stringify({items:o.items}));
+      onNav("order");
+    }catch{}
+  }
 
   return(
     <div style={{padding:"14px 14px 80px"}}>
