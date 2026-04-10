@@ -56,6 +56,7 @@ const C={bg:"#F4F6FA",card:"#FFFFFF",bdr:"#E2E8F0",acc:"#0F172A",txt:"#0F172A",s
 const uid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>new Date().toISOString().slice(0,10);
 const fmtN=n=>(n||0).toString().replace(/\B(?=(\d{3})+(?!\d))/g,",");
+const fmtW=n=>`${fmtN(Math.round(n||0))}원`;
 const CATS=["이너","아우터","팬츠","니트","원피스","스커트","기타"];
 const CAT_C={이너:"#0F172A",아우터:"#0F172A",팬츠:"#0F172A",니트:"#0F172A",원피스:"#0F172A",스커트:"#0F172A",기타:"#64748B"};
 const VEN_TYPES=["원단","안감","단추","지퍼","심지","기타"];
@@ -242,6 +243,7 @@ function DashPage({orders,products,onNav}){
   const tO=orders.filter(o=>o.date===td);
   const mQ=orders.filter(o=>o.date?.slice(0,7)===td.slice(0,7)).reduce((s,o)=>s+(o.items||[]).reduce((ss,i)=>ss+(i.qty||0),0),0);
   const delayed=orders.filter(o=>o.status==="지연");
+  const mAmt=orders.filter(o=>o.date?.slice(0,7)===td.slice(0,7)).reduce((s,o)=>s+(Number(o.total_amount)||0),0);
   const chart=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));const ds=d.toISOString().slice(0,10);return{label:ds.slice(5),v:orders.filter(o=>o.date===ds).reduce((s,o)=>s+(o.items||[]).reduce((ss,ii)=>ss+(ii.qty||0),0),0)};});
   return(
     <div style={{padding:"18px 14px 94px"}}>
@@ -259,6 +261,7 @@ function DashPage({orders,products,onNav}){
           <Tag ch={`오늘 발주 ${tO.length}건`} c="#FFFFFF" />
           <Tag ch={`미출고 ${delayed.length}건`} c="#FFFFFF" />
           <Tag ch={`월간 ${fmtN(mQ)}매`} c="#FFFFFF" />
+          <Tag ch={`월간 ${fmtW(mAmt)}`} c="#FFFFFF" />
         </div>
       </Card>
       <Card st={{marginBottom:14}}>
@@ -270,6 +273,7 @@ function DashPage({orders,products,onNav}){
           <div>
             <div style={{fontSize:13,fontWeight:800,color:C.txt}}>월간 발주량</div>
             <div style={{marginTop:8,fontSize:18,fontWeight:900,color:C.txt}}>{fmtN(mQ)}매</div>
+            <div style={{marginTop:4,fontSize:12,fontWeight:800,color:C.sub2}}>예상 발주금액 {fmtW(mAmt)}</div>
           </div>
           <Tag ch="최근 7일 기준" c={C.ok}/>
         </div>
@@ -361,7 +365,13 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         body += `${idx + 1}. ${line.mat}\n`;
         body += `   - 컬러: ${line.color}\n`;
         body += `   - 수량: ${fmtN(line.soyo)}${line.unit}\n`;
+        if (line.unitPrice > 0) {
+          body += `   - 단가: ${fmtW(line.unitPrice)}\n`;
+          body += `   - 금액: ${fmtW(line.amount)}\n`;
+        }
       });
+      const productAmount = product.lines.reduce((s, line) => s + (line.amount || 0), 0);
+      if (productAmount > 0) body += `   → 상품 합계: ${fmtW(productAmount)}\n`;
       body += `\n`;
     });
 
@@ -370,6 +380,9 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     body += `${firstProduct?.factory || "-"}\n`;
     body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}\n`;
     body += `연락처: ${firstProduct?.factoryTel || "-"}\n`;
+
+    const totalAmount = Object.values(groupedProducts).reduce((sum, product) => sum + product.lines.reduce((s, line) => s + (line.amount || 0), 0), 0);
+    if (totalAmount > 0) body += `\n■ 거래처 예상 합계\n${fmtW(totalAmount)}\n`;
 
     if (memo || vendorMemoText) {
       body += `\n■ 요청 및 전달사항\n`;
@@ -410,12 +423,16 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
             lines: []
           };
         }
+        const unitPrice = Number(b.price || 0);
+        const amount = Math.round(soyo * unitPrice);
         vendorGroup.products[prod.name].lines.push({
           mat: b.mat || "-",
           color: b.color || it.color,
           soyo,
           unit: b.unit || "yd",
-          type: b.type || "기타"
+          type: b.type || "기타",
+          unitPrice,
+          amount
         });
       }
     }
@@ -426,10 +443,12 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     }
     const pData = targets.map(({ vendor, products: groupedProducts }) => {
       const vendorMemoText = vendorMemos[vendor.id] || "";
+      const totalAmount = Object.values(groupedProducts).reduce((sum, product) => sum + product.lines.reduce((s, line) => s + (line.amount || 0), 0), 0);
       return {
         vendor,
         groupedProducts,
         vendorMemo: vendorMemoText,
+        totalAmount,
         body: buildOrderBody({ vendor, groupedProducts, vendorMemoText })
       };
     });
@@ -446,12 +465,23 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     }));
   }
 
+  function calcOrderTotalAmount(groupItems){
+    return groupItems.reduce((sum,it)=>{
+      const prod = products.find(x=>x.id===it.pid);
+      if(!prod) return sum;
+      const bomList = prod.colorBom?.[it.color] || prod.bom || [];
+      const itemAmount = bomList.reduce((s,b)=>s + ((Number(b.amt)||0) * (Number(it.qty)||0) * (Number(b.price)||0)), 0);
+      return sum + itemAmount;
+    },0);
+  }
+
   async function confirmOrder() {
     setSending(true);
     const groupedByPid = items.reduce((acc, it) => { if(!acc[it.pid]) acc[it.pid] = []; acc[it.pid].push(it); return acc; }, {});
     const ts = new Date().toISOString(), d = today(), newOrders = [];
     for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      const o = { items: groupItems, status: "진행중", date: d, ts, is_archived:false, archived_at:null };
+      const totalAmount = Math.round(calcOrderTotalAmount(groupItems));
+      const o = { items: groupItems, status: "진행중", date: d, ts, is_archived:false, archived_at:null, total_amount: totalAmount };
       try{
         if(!user?.token) { alert("로그인 정보가 없습니다."); setSending(false); return; }
         const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
@@ -593,6 +623,11 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                     style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"78px",boxSizing:"border-box"}}
                   />
                 </div>
+                {d.totalAmount > 0 && (
+                  <div style={{fontSize:12,fontWeight:800,color:C.txt,marginBottom:12,textAlign:"right"}}>
+                    거래처 예상 합계: {fmtW(d.totalAmount)}
+                  </div>
+                )}
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
                   <Btn ch="카카오톡으로 보내기" full onClick={() => openKakaoWithOrderText(d.body)} />
                 </div>
@@ -1006,7 +1041,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
               <input type="checkbox" checked={isSelected} onChange={()=>toggleSelectOne(o.id)} onClick={e=>e.stopPropagation()} style={{width:18,height:18,accentColor:C.acc,flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:800,fontSize:13,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
-                <div style={{color:C.sub,fontSize:11}}>{o.date} · 총 {fmtN(tot)}장 · 품목 {(o.items||[]).length}개</div>
+                <div style={{color:C.sub,fontSize:11}}>{o.date} · 총 {fmtN(tot)}장 · 품목 {(o.items||[]).length}개{Number(o.total_amount||0)>0 ? ` · ${fmtW(o.total_amount)}` : ""}</div>
               </div>
             </div>
             <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
