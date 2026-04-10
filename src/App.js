@@ -833,6 +833,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
 }
 
 // 🚀 발주 리스트 🚀
+
 function ListPage({orders,setOrders,products,user,onNav}){
   const [boxFilter,setBoxFilter]=useState("진행중");
   const [filter,setFilter]=useState("전체");
@@ -840,14 +841,13 @@ function ListPage({orders,setOrders,products,user,onNav}){
   const [startDate,setStartDate]=useState("");
   const [endDate,setEndDate]=useState("");
   const [open,setOpen]=useState(null);
-  const [selectionMode,setSelectionMode]=useState(false);
   const [selectedIds,setSelectedIds]=useState([]);
   const SC={완료:C.ok,지연:C.warn,진행중:C.acc};
 
   function isArchived(order){ return !!order?.is_archived; }
-  function exitSelectionMode(){ setSelectionMode(false); setSelectedIds([]); setOpen(null); }
-  function toggleSelectOne(id){ setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
   function getPastDate(days){ const d=new Date(); d.setDate(d.getDate()-days); return d.toISOString().slice(0,10); }
+  function toggleSelectOne(id){ setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]); }
+  function clearSelection(){ setSelectedIds([]); }
 
   const tToday=today(), tYest=getPastDate(1), tWeek=getPastDate(7);
 
@@ -887,7 +887,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
   };
 
   function selectAllFiltered(){ setSelectedIds(filtered.map(o=>o.id)); }
-  function clearSelection(){ setSelectedIds([]); }
+  const allSelected = filtered.length>0 && filtered.every(o=>selectedIds.includes(o.id));
 
   async function changeStatus(id,status){
     if(user?.token) try{ await DB.update(user.token,"orders",id,{status}); }catch{}
@@ -902,6 +902,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
       if(user?.token) await DB.update(user.token,"orders",id,{is_archived:true,archived_at:archivedAt});
       setOrders(prev=>prev.map(x=>x.id===id?{...x,is_archived:true,archived_at:archivedAt}:x));
       if(open===id) setOpen(null);
+      setSelectedIds(prev=>prev.filter(x=>x!==id));
     }catch(e){ alert("보관 처리에 실패했습니다."); }
   }
 
@@ -910,6 +911,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
       if(user?.token) await DB.update(user.token,"orders",id,{is_archived:false,archived_at:null});
       setOrders(prev=>prev.map(x=>x.id===id?{...x,is_archived:false,archived_at:null}:x));
       if(open===id) setOpen(null);
+      setSelectedIds(prev=>prev.filter(x=>x!==id));
     }catch(e){ alert("보관 해제에 실패했습니다."); }
   }
 
@@ -923,7 +925,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
         }
       }
       setOrders(prev=>prev.map(o=>selectedIds.includes(o.id)?{...o,status}:o));
-      exitSelectionMode();
+      clearSelection();
     }catch(e){ alert("일괄 상태 변경에 실패했습니다."); }
   }
 
@@ -938,7 +940,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
         }
       }
       setOrders(prev=>prev.map(o=>selectedIds.includes(o.id)?{...o,is_archived:true,archived_at:archivedAt}:o));
-      exitSelectionMode();
+      clearSelection();
     }catch(e){ alert("일괄 보관에 실패했습니다."); }
   }
 
@@ -952,7 +954,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
         }
       }
       setOrders(prev=>prev.map(o=>selectedIds.includes(o.id)?{...o,is_archived:false,archived_at:null}:o));
-      exitSelectionMode();
+      clearSelection();
     }catch(e){ alert("일괄 보관 해제에 실패했습니다."); }
   }
 
@@ -971,31 +973,26 @@ function ListPage({orders,setOrders,products,user,onNav}){
           <div style={{fontWeight:900,fontSize:20}}>발주 리스트</div>
           <Tag ch={`${filtered.length}건`} c={C.sub}/>
         </div>
-        <Btn ch={selectionMode?"선택 취소":"선택"} v="w" sz="s" onClick={()=>selectionMode?exitSelectionMode():setSelectionMode(true)}/>
+        <div style={{fontSize:12,fontWeight:800,color:C.sub2}}>선택 {selectedIds.length}건</div>
       </div>
 
-      {selectionMode&&<Card st={{marginBottom:12,padding:12,borderRadius:18}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-          <div style={{fontSize:13,fontWeight:800,color:C.txt}}>선택 {selectedIds.length}건</div>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            <Btn ch="전체 선택" v="w" sz="s" onClick={selectAllFiltered}/>
-            <Btn ch="전체 해제" v="w" sz="s" onClick={clearSelection}/>
-          </div>
-        </div>
-      </Card>}
-
       <div style={{display:"flex",gap:7,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
-        {["진행중","완료","보관함"].map(s=><button key={s} onClick={()=>{setBoxFilter(s);setFilter("전체");exitSelectionMode();}} style={{padding:"8px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${boxFilter===s?C.acc:C.bdr}`,background:boxFilter===s?C.acc+"18":"#fff",color:boxFilter===s?C.acc:C.sub2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{s}<span style={{fontSize:11,opacity:.9}}>{boxCounts[s]}</span></button>)}
+        {["진행중","완료","보관함"].map(s=><button key={s} onClick={()=>{setBoxFilter(s);setFilter("전체");clearSelection();setOpen(null);}} style={{padding:"8px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${boxFilter===s?C.acc:C.bdr}`,background:boxFilter===s?C.acc+"18":"#fff",color:boxFilter===s?C.acc:C.sub2,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap"}}>{s}<span style={{fontSize:11,opacity:.9}}>{boxCounts[s]}</span></button>)}
       </div>
 
       <div style={{display:"flex",gap:7,marginBottom:dateFilter==="기간설정"?8:12,overflowX:"auto",paddingBottom:4}}>
-        {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>{setDateFilter(s);exitSelectionMode();}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
+        {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>{setDateFilter(s);clearSelection();setOpen(null);}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
       </div>
 
       {dateFilter==="기간설정"&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/><span style={{color:C.sub}}>-</span><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/></div>}
 
-      <div style={{display:"flex",gap:7,marginBottom:14,overflowX:"auto",paddingBottom:4}}>
-        {statusTabs.map(s=><button key={s} onClick={()=>{setFilter(s);exitSelectionMode();}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
+      <div style={{display:"flex",gap:7,marginBottom:10,overflowX:"auto",paddingBottom:4}}>
+        {statusTabs.map(s=><button key={s} onClick={()=>{setFilter(s);clearSelection();setOpen(null);}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <Btn ch={allSelected?"전체 해제":"전체 선택"} v="w" sz="s" onClick={()=>allSelected?clearSelection():selectAllFiltered()} st={{flex:1}}/>
+        <Btn ch="전체 해제" v="w" sz="s" onClick={clearSelection} st={{flex:1}}/>
       </div>
 
       {filtered.length===0?<Empty icon="📋" text={boxFilter==="보관함"?"보관된 발주 내역이 없습니다":"조건에 맞는 발주 내역이 없습니다"}/>:filtered.map(o=>{
@@ -1003,10 +1000,10 @@ function ListPage({orders,setOrders,products,user,onNav}){
         const isO=open===o.id;
         const isSelected=selectedIds.includes(o.id);
         const title=Array.from(new Set((o.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-"))).join(", ");
-        return <Card key={o.id} st={{marginBottom:10,cursor:"pointer",border:selectionMode&&isSelected?`1.5px solid ${C.acc}`:`1px solid ${C.bdr}`}} onClick={()=>{if(selectionMode)toggleSelectOne(o.id);else setOpen(isO?null:o.id);}}>
+        return <Card key={o.id} st={{marginBottom:10,cursor:"pointer",border:isSelected?`1.5px solid ${C.acc}`:`1px solid ${C.bdr}`}} onClick={()=>setOpen(isO?null:o.id)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
             <div style={{display:"flex",alignItems:"center",gap:10,flex:1,minWidth:0}}>
-              {selectionMode&&<input type="checkbox" checked={isSelected} onChange={()=>toggleSelectOne(o.id)} onClick={e=>e.stopPropagation()} style={{width:18,height:18,accentColor:C.acc,flexShrink:0}}/>}
+              <input type="checkbox" checked={isSelected} onChange={()=>toggleSelectOne(o.id)} onClick={e=>e.stopPropagation()} style={{width:18,height:18,accentColor:C.acc,flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontWeight:800,fontSize:13,marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
                 <div style={{color:C.sub,fontSize:11}}>{o.date} · 총 {fmtN(tot)}장 · 품목 {(o.items||[]).length}개</div>
@@ -1014,11 +1011,11 @@ function ListPage({orders,setOrders,products,user,onNav}){
             </div>
             <div style={{display:"flex",alignItems:"center",gap:7,flexShrink:0}}>
               <Tag ch={o.status} c={SC[o.status]||C.sub}/>
-              {!selectionMode&&<span style={{color:C.sub,fontSize:12}}>{isO?"▲":"›"}</span>}
+              <span style={{color:C.sub,fontSize:12}}>{isO?"▲":"›"}</span>
             </div>
           </div>
 
-          {!selectionMode&&isO&&<div onClick={e=>e.stopPropagation()}>
+          {isO&&<div onClick={e=>e.stopPropagation()}>
             <Divider/>
             {(o.items||[]).map((it,j)=>{const p=products.find(x=>x.id===it.pid);return<div key={j} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:j<(o.items||[]).length-1?`1px solid ${C.bdr}`:"none",fontSize:12,gap:8}}><span style={{fontWeight:600,flex:1}}>{p?.name}</span><span style={{whiteSpace:"nowrap"}}>{it.color} · <strong>{fmtN(it.qty)}</strong>장</span></div>;})}
             <div style={{display:"flex",gap:7,marginTop:10,flexWrap:"wrap"}}>
@@ -1034,7 +1031,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
         </Card>;
       })}
 
-      {selectionMode&&filtered.length>0&&<div style={{position:"fixed",left:"50%",bottom:92,transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:456,background:"rgba(255,255,255,0.96)",border:`1px solid ${C.bdr}`,borderRadius:22,boxShadow:"0 18px 40px rgba(15,23,42,0.12)",backdropFilter:"blur(16px)",padding:12,boxSizing:"border-box",zIndex:70}}>
+      {selectedIds.length>0&&<div style={{position:"fixed",left:"50%",bottom:92,transform:"translateX(-50%)",width:"calc(100% - 24px)",maxWidth:456,background:"rgba(255,255,255,0.96)",border:`1px solid ${C.bdr}`,borderRadius:22,boxShadow:"0 18px 40px rgba(15,23,42,0.12)",backdropFilter:"blur(16px)",padding:12,boxSizing:"border-box",zIndex:70}}>
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
           {boxFilter!=="보관함"&&filter!=="완료"&&<Btn ch="선택 완료" onClick={()=>bulkChangeStatus("완료")} st={{flex:1}}/>}
           {boxFilter!=="보관함"
