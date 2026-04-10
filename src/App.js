@@ -369,29 +369,45 @@ function OrderPage({products,orders,setOrders,vendors,factories,user,templates,s
       alert("저장할 발주 항목이 없습니다.");
       return;
     }
-    if(!user?.token || !user?.id){
+    if(!user?.token){
       alert("로그인 정보가 없습니다.");
       return;
     }
 
-    const payload = {
-      user_id: user.id,
+    const payloadWithUser = {
+      user_id: user?.id || null,
+      name,
+      items: makeTemplateItems(items),
+    };
+
+    const payloadNoUser = {
       name,
       items: makeTemplateItems(items),
     };
 
     try{
-      const r = await DB.insert(user.token, "order_templates", payload);
-      if(r.error || r.code || !Array.isArray(r) || r.length===0){
-        alert("템플릿 저장 실패");
+      let r = await DB.insert(user.token, "order_templates", payloadWithUser);
+
+      // 1차 실패 시 user_id 없이 한 번 더 시도
+      if(r?.error || r?.code || !Array.isArray(r) || r.length===0){
+        console.log("템플릿 저장 1차 실패", r);
+        r = await DB.insert(user.token, "order_templates", payloadNoUser);
+      }
+
+      if(r?.error || r?.code || !Array.isArray(r) || r.length===0){
+        console.log("템플릿 저장 최종 실패", r);
+        const msg = r?.message || r?.error?.message || JSON.stringify(r);
+        alert("템플릿 저장 실패\n" + msg);
         return;
       }
+
       setTemplates(prev=>[r[0], ...(Array.isArray(prev)?prev:[])]);
       setTemplateName("");
       setShowTemplateSave(false);
       alert("템플릿 저장 완료");
     }catch(e){
-      alert("템플릿 저장 실패");
+      console.log("템플릿 저장 예외", e);
+      alert("템플릿 저장 실패\n" + (e?.message || "알 수 없는 오류"));
     }
   }
 
