@@ -630,6 +630,37 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
           </div>
           <div style={{ display: "flex", gap: 10 }}><Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} /><Btn ch={sending ? "저장 중..." : "최종 저장하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} /></div>
         </Sheet>
+
+      {selectionMode && filtered.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: 92,
+            transform: "translateX(-50%)",
+            width: "calc(100% - 24px)",
+            maxWidth: 456,
+            background: "rgba(255,255,255,0.96)",
+            border: `1px solid ${C.bdr}`,
+            borderRadius: 22,
+            boxShadow: "0 18px 40px rgba(15,23,42,0.12)",
+            backdropFilter: "blur(16px)",
+            padding: 12,
+            boxSizing: "border-box",
+            zIndex: 70,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {boxFilter !== "보관함" && filter !== "완료" && (
+              <Btn ch="선택 완료" full={false} onClick={() => bulkChangeStatus("완료")} st={{ flex: 1 }} />
+            )}
+            {boxFilter !== "보관함" ? (
+              <Btn ch="선택 보관" v="w" full={false} onClick={bulkArchive} st={{ flex: 1 }} />
+            ) : (
+              <Btn ch="선택 보관 해제" v="w" full={false} onClick={bulkUnarchive} st={{ flex: 1 }} />
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
@@ -896,7 +927,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
   async function changeStatus(id,status){
     if(user?.token)try{await DB.update(user.token,"orders",id,{status});}catch{}
     setOrders(p=>p.map(x=>x.id===id?{...x,status}:x));
-    if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null);
+    if(open===id && status==="완료" && boxFilter==="진행중") setOpen(null); exitSelectionMode();
   }
   async function archiveOrder(id){
     if(!window.confirm("목록에서 보관하시겠습니까? 데이터는 삭제되지 않습니다.")) return;
