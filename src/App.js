@@ -46,7 +46,28 @@ async function openKakaoWithOrderText(body) {
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined});return r.json();};
-const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)}),listTemplates:t=>api("GET",`/rest/v1/order_templates?order=created_at.desc`,t)};
+const DB={
+signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),
+signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),
+signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),
+updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),
+list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),
+insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),
+update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),
+del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)}),
+listTemplates: async (t) => {
+  const r = await fetch(`${SB}/rest/v1/order_templates?select=*&order=created_at.desc`, { method:"GET", headers: ah(t) });
+  return r.json();
+},
+insertTemplate: async (t, d) => {
+  const r = await fetch(`${SB}/rest/v1/order_templates`, {
+    method: "POST",
+    headers: ah(t),
+    body: JSON.stringify(d)
+  });
+  return r.json();
+}
+};
 
 // ── 유틸 및 상수 (기존 유지) ────────────────────────────────────────────
 const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
@@ -360,54 +381,41 @@ function OrderPage({products,orders,setOrders,vendors,factories,user,templates,s
   }
 
   async function saveCurrentAsTemplate(){
-    const name = (templateName || "").trim();
-    if(!name){
-      alert("템플릿 이름을 입력하세요");
-      return;
-    }
-    if(!items.length){
-      alert("저장할 발주 항목이 없습니다.");
-      return;
-    }
-    if(!user?.token){
-      alert("로그인 정보가 없습니다.");
-      return;
-    }
+    const name=(templateName||"").trim();
+    if(!name){alert("템플릿 이름을 입력하세요");return;}
+    if(!items.length){alert("저장할 발주 항목이 없습니다.");return;}
+    if(!user?.token){alert("로그인 정보가 없습니다.");return;}
 
-    const payloadWithUser = {
-      user_id: user?.id || null,
+    const payload={
+      user_id:user?.id||null,
       name,
-      items: makeTemplateItems(items),
-    };
-
-    const payloadNoUser = {
-      name,
-      items: makeTemplateItems(items),
+      items:makeTemplateItems(items),
     };
 
     try{
-      let r = await DB.insert(user.token, "order_templates", payloadWithUser);
+      const r=await DB.insertTemplate(user.token,payload);
 
-      // 1차 실패 시 user_id 없이 한 번 더 시도
-      if(r?.error || r?.code || !Array.isArray(r) || r.length===0){
-        console.log("템플릿 저장 1차 실패", r);
-        r = await DB.insert(user.token, "order_templates", payloadNoUser);
-      }
-
-      if(r?.error || r?.code || !Array.isArray(r) || r.length===0){
-        console.log("템플릿 저장 최종 실패", r);
-        const msg = r?.message || r?.error?.message || JSON.stringify(r);
-        alert("템플릿 저장 실패\n" + msg);
+      if(r?.error || r?.code){
+        const msg=r.message||r.error?.message||JSON.stringify(r);
+        alert("템플릿 저장 실패
+"+msg);
         return;
       }
 
-      setTemplates(prev=>[r[0], ...(Array.isArray(prev)?prev:[])]);
+      const row = Array.isArray(r) ? r[0] : r;
+      if(!row || !row.name){
+        alert("템플릿 저장 실패
+응답 형식을 확인해주세요.");
+        return;
+      }
+
+      setTemplates(prev=>[row,...(Array.isArray(prev)?prev:[])]);
       setTemplateName("");
       setShowTemplateSave(false);
       alert("템플릿 저장 완료");
     }catch(e){
-      console.log("템플릿 저장 예외", e);
-      alert("템플릿 저장 실패\n" + (e?.message || "알 수 없는 오류"));
+      alert("템플릿 저장 실패
+"+(e?.message||"알 수 없는 오류"));
     }
   }
 
