@@ -56,14 +56,17 @@ insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),
 update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),
 del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)}),
 listTemplates: async (t) => {
-  const r = await fetch(`${SB}/rest/v1/order_templates?select=*&order=created_at.desc`, { method:"GET", headers: ah(t) });
+  const r = await fetch(`${SB}/rest/v1/order_templates?select=*&order=created_at.desc`, {
+    method: "GET",
+    headers: ah(t),
+  });
   return r.json();
 },
 insertTemplate: async (t, d) => {
   const r = await fetch(`${SB}/rest/v1/order_templates`, {
     method: "POST",
     headers: ah(t),
-    body: JSON.stringify(d)
+    body: JSON.stringify(d),
   });
   return r.json();
 }
@@ -1353,6 +1356,7 @@ export default function App(){
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||"", memo:x.memo||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{}, imageUrl:x.image_url||""})):[]);
       setOrders(Array.isArray(o)?o.map(x=>({...x,is_archived:!!x.is_archived,archived_at:x.archived_at||null})):[]);
+      setTemplates(Array.isArray(tpl)?tpl:[]);
       setTemplates(Array.isArray(tpl)?tpl:[]);
     }catch(e){setScreen("auth");}
     finally{setLoading(false);}
