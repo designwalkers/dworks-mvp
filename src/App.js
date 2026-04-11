@@ -1391,7 +1391,7 @@ export default function App(){
   if(screen!=="app"||!user)return<AuthPage onLogin={handleLogin}/>;
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
-    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
+    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage} templates={templates} setTemplates={setTemplates}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
     list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} onNav={setPage}/>,
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
