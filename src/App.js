@@ -46,31 +46,7 @@ async function openKakaoWithOrderText(body) {
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined});return r.json();};
-const DB={
-signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),
-signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),
-signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),
-updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),
-list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),
-insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),
-update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),
-del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)}),
-listTemplates: async (t) => {
-  const r = await fetch(`${SB}/rest/v1/order_templates?select=*&order=created_at.desc`, {
-    method: "GET",
-    headers: ah(t),
-  });
-  return r.json();
-},
-insertTemplate: async (t, d) => {
-  const r = await fetch(`${SB}/rest/v1/order_templates`, {
-    method: "POST",
-    headers: ah(t),
-    body: JSON.stringify(d),
-  });
-  return r.json();
-}
-};
+const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)})};
 
 // ── 유틸 및 상수 (기존 유지) ────────────────────────────────────────────
 const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
@@ -327,7 +303,7 @@ function DashPage({orders,products,onNav}){
     </div>
   );
 }
-function OrderPage({products,orders,setOrders,vendors,factories,user,templates,setTemplates}){
+function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [step,setStep]=useState(1);
   const [items,setItems]=useState([]);
   const [memo,setMemo]=useState("");
@@ -340,8 +316,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user,templates,s
   const [showPreview, setShowPreview] = useState(false);
   const [previewData, setPreviewData] = useState([]);
   const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
-  const [templateName,setTemplateName]=useState("");
-  const [showTemplateSave,setShowTemplateSave]=useState(false);
 
   const DRAFT="dworks_draft";
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
@@ -349,79 +323,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user,templates,s
     .filter(o => !o?.is_archived && Array.isArray(o?.items) && o.items.length > 0)
     .sort((a,b)=>new Date(b.ts||b.date||0)-new Date(a.ts||a.date||0))
     .slice(0,3);
-
-  const safeTemplates = Array.isArray(templates) ? templates : [];
-
-  function makeTemplateItems(srcItems){
-    return (srcItems||[]).map(it=>({
-      pid: it.pid,
-      color: it.color,
-      qty: 0
-    }));
-  }
-
-  function applyTemplate(tpl){
-    const nextItems = makeTemplateItems(tpl?.items || []);
-    if(!nextItems.length){
-      alert("템플릿 항목이 없습니다.");
-      return;
-    }
-    setItems(nextItems);
-    setSearch("");
-    setSelProd(null);
-    setSelColor("");
-    setQty("");
-    setStep(1);
-    setLoadedRecentInfo({
-      orderId: tpl.id,
-      date: "템플릿",
-      summary: {
-        title: tpl.name || "템플릿",
-        totalQty: 0,
-        itemCount: nextItems.length,
-      },
-    });
-  }
-
-  async function saveCurrentAsTemplate(){
-    const name=(templateName||"").trim();
-    if(!name){alert("템플릿 이름을 입력하세요");return;}
-    if(!items.length){alert("저장할 발주 항목이 없습니다.");return;}
-    if(!user?.token){alert("로그인 정보가 없습니다.");return;}
-
-    const payload={
-      user_id:user?.id||null,
-      name,
-      items:makeTemplateItems(items),
-    };
-
-    try{
-      const r=await DB.insertTemplate(user.token,payload);
-
-      if(r?.error || r?.code){
-        const msg=r.message||r.error?.message||JSON.stringify(r);
-        alert("템플릿 저장 실패
-"+msg);
-        return;
-      }
-
-      const row = Array.isArray(r) ? r[0] : r;
-      if(!row || !row.name){
-        alert("템플릿 저장 실패
-응답 형식을 확인해주세요.");
-        return;
-      }
-
-      setTemplates(prev=>[row,...(Array.isArray(prev)?prev:[])]);
-      setTemplateName("");
-      setShowTemplateSave(false);
-      alert("템플릿 저장 완료");
-    }catch(e){
-      alert("템플릿 저장 실패
-"+(e?.message||"알 수 없는 오류"));
-    }
-  }
-
 
   function getOrderSummary(order){
     const names = Array.from(new Set((order.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-")));
@@ -602,15 +503,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user,templates,s
       <div style={{fontWeight:900,fontSize:20,marginBottom:4}}>{step===1?"발주 입력":"발주서 확인"}</div>
       <div style={{color:C.sub,fontSize:12,marginBottom:14}}>기본 정보를 입력해 주세요</div>
       <StepBar cur={step-1}/>
-      {step===1&&safeTemplates.length>0&&<Card st={{marginBottom:14,background:"#FFF",border:`1px solid ${C.bdr}`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <div style={{fontWeight:800,fontSize:13,color:C.txt}}>📌 자주 쓰는 발주 템플릿</div>
-          <Tag ch={`${safeTemplates.length}개`} c={C.sub2}/>
-        </div>
-        <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:2}}>
-          {safeTemplates.slice(0,10).map(tpl=><button key={tpl.id} onClick={()=>applyTemplate(tpl)} style={{padding:"10px 14px",borderRadius:14,border:`1px solid ${C.bdr}`,background:"#F8FAFC",color:C.txt,fontSize:12,fontWeight:800,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap",flexShrink:0}}>{tpl.name}</button>)}
-        </div>
-      </Card>}
       {step===1&&recentOrders.length>0&&<Card st={{marginBottom:14,background:"#FFF",border:`1px solid ${C.bdr}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{fontWeight:800,fontSize:13,color:C.txt}}>최근 발주 빠른 불러오기</div>
@@ -657,18 +549,8 @@ function OrderPage({products,orders,setOrders,vendors,factories,user,templates,s
             );
           })}
         </Card>
-        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}><Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>{if(!items.length)return;try{localStorage.setItem(DRAFT,JSON.stringify({items}));alert(`✅ 임시저장 완료!`);}catch{}}}/><Btn ch="템플릿 저장" v="w" full st={{flex:1}} onClick={()=>{if(!items.length){alert("저장할 항목이 없습니다.");return;}setShowTemplateSave(true);}}/><Btn ch="다음" full st={{flex:2}} onClick={()=>items.length?setStep(2):alert("항목 추가 필요")} disabled={!items.length}/></div>
+        <div style={{display:"flex",gap:10}}><Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>{if(!items.length)return;try{localStorage.setItem(DRAFT,JSON.stringify({items}));alert(`✅ 임시저장 완료!`);}catch{}}}/><Btn ch="다음" full st={{flex:2}} onClick={()=>items.length?setStep(2):alert("항목 추가 필요")} disabled={!items.length}/></div>
       </>}
-      {showTemplateSave&&<Sheet title="발주 템플릿 저장" onClose={()=>setShowTemplateSave(false)}>
-        <Field label="템플릿명" req><TxtInp val={templateName} onChange={setTemplateName} ph="예: 프랑체크남방 기본발주"/></Field>
-        <div style={{fontSize:12,color:C.sub2,marginBottom:14,lineHeight:1.6}}>
-          현재 발주 리스트를 템플릿으로 저장합니다. 저장 시 수량은 0으로 초기화되어 다음에 불러와서 수량만 넣으면 됩니다.
-        </div>
-        <div style={{display:"flex",gap:10}}>
-          <Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setShowTemplateSave(false)}/>
-          <Btn ch="저장" full st={{flex:2}} onClick={saveCurrentAsTemplate}/>
-        </div>
-      </Sheet>}
       {step===2&&<>
         <Card st={{marginBottom:12}}>
           <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>발주 내역</div>
@@ -1346,18 +1228,15 @@ export default function App(){
   const [factories,setFactories]=useState([]);
   const [products,setProducts]=useState([]);
   const [orders,setOrders]=useState([]);
-  const [templates,setTemplates]=useState([]);
   const [loading,setLoading]=useState(false);
   async function loadData(token){
     setLoading(true);
     try{
-      const[v,f,p,o,tpl]=await Promise.all([DB.list(token,"vendors"),DB.list(token,"factories"),DB.list(token,"products"),DB.list(token,"orders"),DB.listTemplates(token)]);
+      const[v,f,p,o]=await Promise.all([DB.list(token,"vendors"),DB.list(token,"factories"),DB.list(token,"products"),DB.list(token,"orders")]);
       setVendors(Array.isArray(v)?v.map(x=>({...x, subTel:x.sub_tel||"", address:x.address||"", bizNo:x.biz_no||"", memo:x.memo||""})):[]);
       setFactories(Array.isArray(f)?f.map(x=>({...x,bizType:x.biz_type||x.bizType||"", bizNo:x.biz_no||x.bizNo||"", memo:x.memo||""})):[]);
       setProducts(Array.isArray(p)?p.map(x=>({...x,factoryId:x.factory_id||x.factoryId||"",factoryTel:x.factory_tel||x.factoryTel||"",colors:x.colors||[],colorBom:x.color_bom||x.colorBom||{}, imageUrl:x.image_url||""})):[]);
       setOrders(Array.isArray(o)?o.map(x=>({...x,is_archived:!!x.is_archived,archived_at:x.archived_at||null})):[]);
-      setTemplates(Array.isArray(tpl)?tpl:[]);
-      setTemplates(Array.isArray(tpl)?tpl:[]);
     }catch(e){setScreen("auth");}
     finally{setLoading(false);}
   }
@@ -1395,7 +1274,7 @@ export default function App(){
   if(screen!=="app"||!user)return<AuthPage onLogin={handleLogin}/>;
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
-    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage} templates={templates} setTemplates={setTemplates}/>,
+    order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
     list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} onNav={setPage}/>,
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
