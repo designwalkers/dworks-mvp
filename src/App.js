@@ -1134,7 +1134,10 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
     if(setUser)setUser(u=>({...u,...pf})); setProfileSheet(false); alert("저장되었습니다!");
   }
   async function saveFac(){
-    if(!facSheet.name)return;
+    if(!facSheet.name || !facSheet.address || !facSheet.tel){
+      alert("공장명, 주소, 연락처는 필수입니다.");
+      return;
+    }
     const{id,...data}=facSheet;
     try{
       if(id){
@@ -1209,8 +1212,8 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
       {facSheet&&<Sheet title={facSheet.id?"공장 수정":"공장 추가"} onClose={()=>setFacSheet(null)}>
         <Field label="공장명" req><TxtInp val={facSheet.name} onChange={v=>setFacSheet(p=>({...p,name:v}))} ph="공장명"/></Field>
         <Field label="업종"><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{BIZ_TYPES.map(t=>{const act=(facSheet.bizType||"")===t;return <button key={t} onClick={()=>setFacSheet(p=>({...p,bizType:t}))} style={{padding:"9px 13px",borderRadius:999,border:`1px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div></Field>
-        <Field label="주소"><TxtInp val={facSheet.address||""} onChange={v=>setFacSheet(p=>({...p,address:v}))} ph="공장 주소"/></Field>
-        <Field label="연락처"><TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
+        <Field label="주소" req><TxtInp val={facSheet.address||""} onChange={v=>setFacSheet(p=>({...p,address:v}))} ph="공장 주소"/></Field>
+        <Field label="연락처" req><TxtInp val={facSheet.tel||""} onChange={v=>setFacSheet(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
         <Field label="계좌정보"><TxtInp val={facSheet.account||""} onChange={v=>setFacSheet(p=>({...p,account:v}))} ph="은행 / 예금주 / 계좌번호"/></Field>
         <Field label="사업자번호"><TxtInp val={facSheet.bizNo||""} onChange={v=>setFacSheet(p=>({...p,bizNo:v}))} ph="000-00-00000"/></Field>
         <Field label="메모"><div style={{border:`1px solid ${C.bdr}`,borderRadius:8,background:"#fff"}}><textarea value={facSheet.memo||""} onChange={e=>setFacSheet(p=>({...p,memo:e.target.value}))} placeholder="리드타임, 작업 특이사항, 정산 메모 등을 입력하세요" style={{width:"100%",minHeight:88,border:"none",outline:"none",resize:"vertical",padding:"12px 14px",fontSize:13,color:C.txt,fontFamily:C.fn,background:"transparent",boxSizing:"border-box"}}/></div></Field>
