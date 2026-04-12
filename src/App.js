@@ -355,42 +355,55 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
 
   function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
     const companyName = user?.company || "디자인워커스";
-    let body = `[D-Works 발주서]\n`;
-    body += `${vendor.name} 담당자님 안녕하세요.\n\n`;
-    body += `업체명: ${companyName}\n\n`;
+    let body = ``;
+    body += `${vendor.name} 담당자님 안녕하세요.
+
+`;
+    body += `업체명: ${companyName}
+
+`;
 
     Object.values(groupedProducts).forEach(product => {
-      body += `■ 상품명: ${product.productName}\n`;
+      body += `■ 상품명: ${product.productName}
+`;
       product.lines.forEach((line, idx) => {
-        body += `${idx + 1}. ${line.mat}\n`;
-        body += `   - 컬러: ${line.color}\n`;
-        body += `   - 수량: ${fmtN(line.soyo)}${line.unit}\n`;
-        if (line.unitPrice > 0) {
-          body += `   - 단가: ${fmtW(line.unitPrice)}\n`;
-          body += `   - 금액: ${fmtW(line.amount)}\n`;
-        }
+        body += `${idx + 1}. ${line.mat}
+`;
+        body += `   - 컬러: ${line.color}
+`;
+        body += `   - 수량: ${fmtN(line.soyo)}${line.unit}
+`;
       });
-      const productAmount = product.lines.reduce((s, line) => s + (line.amount || 0), 0);
-      if (productAmount > 0) body += `   → 상품 합계: ${fmtW(productAmount)}\n`;
-      body += `\n`;
+      body += `
+`;
     });
 
     const firstProduct = Object.values(groupedProducts)[0];
-    body += `■ 입고처\n`;
-    body += `${firstProduct?.factory || "-"}\n`;
-    body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}\n`;
-    body += `연락처: ${firstProduct?.factoryTel || "-"}\n`;
-
-    const totalAmount = Object.values(groupedProducts).reduce((sum, product) => sum + product.lines.reduce((s, line) => s + (line.amount || 0), 0), 0);
-    if (totalAmount > 0) body += `\n■ 거래처 예상 합계\n${fmtW(totalAmount)}\n`;
+    body += `■ 입고처
+`;
+    body += `${firstProduct?.factory || "-"}
+`;
+    body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}
+`;
+    body += `연락처: ${firstProduct?.factoryTel || "-"}
+`;
 
     if (memo || vendorMemoText) {
-      body += `\n■ 요청 및 전달사항\n`;
-      if (memo) body += `[공통]\n${memo}\n`;
-      if (vendorMemoText) body += `${memo ? `\n` : ``}[업체별]\n${vendorMemoText}\n`;
+      body += `
+`;
+      body += `■ 요청 및 전달사항
+`;
+      if (memo) body += `[공통]
+${memo}
+`;
+      if (vendorMemoText) body += `${memo ? `
+` : ``}[업체별]
+${vendorMemoText}
+`;
     }
 
-    body += `\n감사합니다.\nD-Works`;
+    body += `
+감사합니다.`;
     return body;
   }
 
