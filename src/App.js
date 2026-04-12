@@ -575,7 +575,11 @@ ${vendorMemoText}
       </>}
       {showPreview && (
         <Sheet title="발주 내용 최종 확인" onClose={() => setShowPreview(false)}>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16 }}>아래 내용을 거래처별로 확인한 뒤 카카오톡으로 보내거나 저장할 수 있습니다.</div>
+          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16, lineHeight: 1.6 }}>
+            거래처별로 자동 정리된 발주서입니다.
+            <br />
+            내용을 확인한 뒤 바로 카카오톡으로 보내거나 복사할 수 있습니다.
+          </div>
           <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16, paddingRight: 4 }}>
             {previewData.map((d, i) => (
               <div
@@ -599,7 +603,7 @@ ${vendorMemoText}
                     paddingBottom: 8
                   }}
                 >
-                  📦 받는 사람: {d.vendor.name}
+                  🧾 거래처: {d.vendor.name}
                   {d.vendor.tel && <span style={{ fontWeight: 500, color: C.sub }}> ({d.vendor.tel})</span>}
                 </div>
                 {Object.values(d.groupedProducts).map((product, pIdx) => (
@@ -642,7 +646,21 @@ ${vendorMemoText}
                   </div>
                 )}
                 <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                  <Btn ch="카카오톡으로 보내기" full onClick={() => openKakaoWithOrderText(d.body)} />
+                  <Btn
+                    ch="복사"
+                    v="w"
+                    full
+                    onClick={async () => {
+                      const ok = await copyText(d.body);
+                      if (ok) alert("발주 내용이 복사되었습니다.");
+                      else alert("복사에 실패했습니다.");
+                    }}
+                  />
+                  <Btn
+                    ch="카카오톡으로 보내기"
+                    full
+                    onClick={() => openKakaoWithOrderText(d.body)}
+                  />
                 </div>
               </div>
             ))}
