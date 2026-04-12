@@ -1197,7 +1197,12 @@ function SettingsPage({user,setUser,vendors,factories,setFactories,onLogout}){
   const [profileSheet,setProfileSheet]=useState(false);
   const [pf,setPf]=useState({name:user.name||"",company:user.company||"",tel:user.tel||"",brand:user.brand||"",position:user.position||"",address:user.address||""});
   async function saveProfile(){
-    try{if(user?.token) await DB.updateUser(user.token, {name:pf.name,company:pf.company,tel:pf.tel,brand:pf.brand,position:pf.position,address:pf.address});}catch{}
+    try{
+      if(user?.token){
+        await DB.updateUser(user.token, {name:pf.name,company:pf.company,tel:pf.tel,brand:pf.brand,position:pf.position,address:pf.address});
+        await DB.updateProfile(user.token, user.id, {name:pf.name,company:pf.company,tel:pf.tel});
+      }
+    }catch{}
     if(setUser)setUser(u=>({...u,...pf})); setProfileSheet(false); alert("저장되었습니다!");
   }
   async function saveFac(){
