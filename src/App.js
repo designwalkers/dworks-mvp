@@ -46,7 +46,7 @@ async function openKakaoWithOrderText(body) {
 const SB="https://qimgostiseehdnvhmoph.supabase.co", KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpbWdvc3Rpc2VlaGRudmhtb3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMTQ1NDgsImV4cCI6MjA5MDU5MDU0OH0.7upLxWR1OqwvIx71Z4pFHUU7BFswDvcOQE9edjcL2yg";
 const ah=t=>({"apikey":KEY,"Authorization":`Bearer ${t||KEY}`,"Content-Type":"application/json","Prefer":"return=representation"});
 const api=async(m,p,t,b)=>{const r=await fetch(`${SB}${p}`,{method:m,headers:ah(t),body:b?JSON.stringify(b):undefined});return r.json();};
-const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),updateProfile:(t,id,d)=>api("PATCH",`/rest/v1/profiles?id=eq.${id}`,t,d),list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)})};
+const DB={signUp:(e,pw,m)=>api("POST","/auth/v1/signup",null,{email:e,password:pw,data:m}),signIn:(e,pw)=>api("POST","/auth/v1/token?grant_type=password",null,{email:e,password:pw}),signOut:t=>fetch(`${SB}/auth/v1/logout`,{method:"POST",headers:ah(t)}),updateUser:(t,m)=>api("PUT","/auth/v1/user",t,{data:m}),updateProfile:(t,id,d)=>api("PATCH",`/rest/v1/profiles?id=eq.${id}`,t,d),getProfile:(t,id)=>api("GET",`/rest/v1/profiles?id=eq.${id}`,t),list:(t,tb)=>api("GET",`/rest/v1/${tb}?order=created_at.asc`,t),insert:(t,tb,d)=>api("POST",`/rest/v1/${tb}`,t,d),update:(t,tb,id,d)=>api("PATCH",`/rest/v1/${tb}?id=eq.${id}`,t,d),del:(t,tb,id)=>fetch(`${SB}/rest/v1/${tb}?id=eq.${id}`,{method:"DELETE",headers:ah(t)})};
 
 // ── 유틸 및 상수 (기존 유지) ────────────────────────────────────────────
 const CHO=["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
@@ -214,8 +214,13 @@ function AuthPage({onLogin}){
       }else{
         const r=await DB.signIn(f.email,f.pw);
         if(!r.access_token){setErr("이메일 또는 비밀번호 오류");return;}
+        let profile = null;
+        try{
+          const p = await DB.getProfile(r.access_token, r.user.id);
+          profile = Array.isArray(p) && p.length > 0 ? p[0] : null;
+        }catch(e){}
         const meta=r.user?.user_metadata||{};
-        onLogin({token:r.access_token,id:r.user.id,name:meta.name||f.email.split("@")[0],company:meta.company||"",email:r.user.email,tel:meta.tel||"",brand:meta.brand||"",position:meta.position||"",address:meta.address||""}, f.keepLoggedIn);
+        onLogin({token:r.access_token,id:r.user.id,name:profile?.name||meta.name||f.email.split("@")[0],company:profile?.company||meta.company||"",email:r.user.email,tel:profile?.tel||meta.tel||"",brand:meta.brand||"",position:meta.position||"",address:meta.address||""}, f.keepLoggedIn);
       }
     }catch(e){setErr("네트워크 오류");}
     finally{setLoading(false);}
