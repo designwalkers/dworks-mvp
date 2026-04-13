@@ -445,9 +445,7 @@ function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
         body += `${idx + 1}. ${mat}
 `;
         lines.forEach(line => {
-          body += `   - 컬러: ${line.color}
-`;
-          body += `   - 수량: ${fmtN(line.soyo)}${line.unit}
+          body += `   - 컬러: ${line.color}  ${fmtN(line.soyo)}${line.unit}
 `;
         });
       });
@@ -694,7 +692,7 @@ ${vendorMemoText}
                           <div style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>{lIdx + 1}. {mat}</div>
                           {lines.map((line, cIdx) => (
                             <div key={cIdx} style={{ fontSize: 11, color: C.sub2, marginTop: 3 }}>
-                              {line.color} · {fmtN(line.soyo)}{line.unit}
+                              {line.color}  {fmtN(line.soyo)}{line.unit}
                             </div>
                           ))}
                         </div>
