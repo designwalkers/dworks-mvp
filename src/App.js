@@ -113,9 +113,9 @@ function Field({label,children,req}){return<div style={{marginBottom:16}}><div s
 function TxtInp({val,onChange,ph,type="text",onKeyDown}){return<div style={{display:"flex",alignItems:"center",border:`1px solid ${C.bdr}`,borderRadius:18,background:"#fff",boxShadow:"0 6px 18px rgba(15,23,42,0.03)"}}><input value={val||""} onChange={e=>onChange&&onChange(e.target.value)} placeholder={ph} type={type} onKeyDown={onKeyDown} style={{flex:1,border:"none",outline:"none",padding:"15px 16px",fontSize:14,color:C.txt,fontFamily:C.fn,background:"transparent"}}/></div>;}
 function DropSel({val,onChange,children,ph}){return<div style={{position:"relative",border:`1px solid ${C.bdr}`,borderRadius:18,background:"#fff",boxShadow:"0 6px 18px rgba(15,23,42,0.03)"}}><select value={val||""} onChange={e=>onChange(e.target.value)} style={{width:"100%",border:"none",outline:"none",padding:"15px 16px",fontSize:14,color:val?C.txt:C.sub,fontFamily:C.fn,background:"transparent",WebkitAppearance:"none",cursor:"pointer"}}>{ph&&<option value="">{ph}</option>}{children}</select><span style={{position:"absolute",right:16,top:"50%",transform:"translateY(-50%)",color:C.sub,pointerEvents:"none",fontSize:11}}>∨</span></div>;}
 function StepBar({cur,total=4}){return<div style={{display:"flex",gap:8,marginBottom:22}}>{Array.from({length:total},(_,i)=><div key={i} style={{flex:i===cur?2:1,height:6,borderRadius:999,background:i<=cur?C.acc:"#E7ECF3",transition:"all 0.3s"}}/>)}</div>;}
-function Sheet({title,onClose,children}){
+function Sheet({title,onClose,children,z=9999}){
   return(
-    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(15,23,42,0.48)",display:"flex",alignItems:"flex-end",zIndex:9999}} onClick={onClose}>
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(15,23,42,0.48)",display:"flex",alignItems:"flex-end",zIndex:z}} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:"28px 28px 0 0",padding:"0 20px 40px",width:"100%",maxHeight:"88vh",overflowY:"auto",boxSizing:"border-box",fontFamily:C.fn,maxWidth:480,margin:"0 auto",boxShadow:"0 -16px 60px rgba(15,23,42,0.16)"}}>
         <div style={{width:42,height:5,background:"#D8E0EA",borderRadius:999,margin:"12px auto 18px"}}/>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
@@ -943,14 +943,14 @@ function ProdsPage({products,setProducts,vendors,setVendors,factories,setFactori
           </div>
         </Card>
       ))}
-      {quickVendorSheet&&<Sheet title="신규 거래처 등록" onClose={()=>setQuickVendorSheet(false)}>
+      {quickVendorSheet&&<Sheet title="신규 거래처 등록" onClose={()=>setQuickVendorSheet(false)} z={10001}>
         <Field label="거래처명" req><TxtInp val={quickVendor.name} onChange={v=>setQuickVendor(p=>({...p,name:v}))} ph="거래처명"/></Field>
         <Field label="업체 유형"><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VEN_TYPES.map(t=>{const act=quickVendor.type===t;return<button key={t} onClick={()=>setQuickVendor(p=>({...p,type:t}))} style={{padding:"7px 13px",borderRadius:20,border:`1.5px solid ${act?(VEN_C[t]||C.acc):C.bdr}`,background:act?(VEN_C[t]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:4}}>{VEN_IC[t]} {t}</button>;})}</div></Field>
         <Field label="연락처" req><TxtInp val={quickVendor.tel} onChange={v=>setQuickVendor(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
         <Field label="주소" req><TxtInp val={quickVendor.address} onChange={v=>setQuickVendor(p=>({...p,address:v}))} ph="거래처 주소"/></Field>
         <div style={{display:"flex",gap:10,marginTop:8}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setQuickVendorSheet(false)}/><Btn ch="저장 후 선택" full st={{flex:2}} onClick={saveQuickVendor}/></div>
       </Sheet>}
-      {quickFactorySheet&&<Sheet title="신규 공장 등록" onClose={()=>setQuickFactorySheet(false)}>
+      {quickFactorySheet&&<Sheet title="신규 공장 등록" onClose={()=>setQuickFactorySheet(false)} z={10001}>
         <Field label="공장명" req><TxtInp val={quickFactory.name} onChange={v=>setQuickFactory(p=>({...p,name:v}))} ph="공장명"/></Field>
         <Field label="업종"><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{BIZ_TYPES.map(t=>{const act=(quickFactory.bizType||"")===t;return <button key={t} onClick={()=>setQuickFactory(p=>({...p,bizType:t}))} style={{padding:"9px 13px",borderRadius:999,border:`1px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div></Field>
         <Field label="연락처" req><TxtInp val={quickFactory.tel} onChange={v=>setQuickFactory(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
