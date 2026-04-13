@@ -394,7 +394,17 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       localStorage.setItem(DRAFT, JSON.stringify({items:draftItems}));
     }catch{}
   }
-  function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
+  function addItem(){
+    if(!selProd||!selColor||!qty){
+      alert("상품·색상·수량을 입력하세요");
+      return;
+    }
+    const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);
+    if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));
+    else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);
+    setSelColor("");
+    setQty("");
+  }
 
   
   function normalizeGroupedProductsForMessage(groupedProducts){
