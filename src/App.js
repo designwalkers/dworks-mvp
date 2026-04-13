@@ -280,53 +280,8 @@ function AuthPage({onLogin}){
   );
 }
 
-
-function StartGuideCard({vendors,factories,products,onNav}){
-  const step1Done = (vendors||[]).length > 0;
-  const step2Done = (factories||[]).length > 0;
-  const step3Done = (products||[]).length > 0;
-  const allDone = step1Done && step2Done && step3Done;
-
-  const guideRow = (done, title, desc, buttonText, pageKey, isLast=false) => (
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,padding:"12px 0",borderBottom:isLast?"none":`1px solid ${C.bdr}`}}>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-          <span style={{fontSize:14,fontWeight:800,color:C.txt}}>{done ? `✓ ${title}` : title}</span>
-        </div>
-        <div style={{fontSize:12,color:C.sub2,lineHeight:1.6}}>{desc}</div>
-      </div>
-      {!done && <Btn ch={buttonText} v="w" sz="s" onClick={()=>onNav(pageKey)} st={{flexShrink:0}}/>}
-      {done && <Tag ch="완료" c={C.ok}/>}
-    </div>
-  );
-
-  return (
-    <Card st={{marginBottom:14}}>
-      {!allDone ? (
-        <>
-          <div style={{fontWeight:900,fontSize:15,color:C.txt,marginBottom:6}}>처음 시작하기</div>
-          <div style={{fontSize:12,color:C.sub2,lineHeight:1.6,marginBottom:8}}>
-            아래 3단계를 완료하면 바로 발주를 시작할 수 있습니다.
-          </div>
-          {guideRow(step1Done,"거래처 등록","발주서를 보낼 업체를 먼저 등록하세요.","거래처 등록하기","vendors")}
-          {guideRow(step2Done,"공장 등록","입고처로 사용할 공장 정보를 등록하세요.","공장 등록하기","settings")}
-          {guideRow(step3Done,"상품 등록","상품, 컬러, 원부자재를 등록하면 발주할 수 있습니다.","상품 등록하기","prods",true)}
-        </>
-      ) : (
-        <>
-          <div style={{fontWeight:900,fontSize:15,color:C.txt,marginBottom:6}}>시작 준비가 완료되었습니다.</div>
-          <div style={{fontSize:12,color:C.sub2,lineHeight:1.6,marginBottom:14}}>
-            이제 발주를 생성해보세요.
-          </div>
-          <Btn ch="발주하러 가기" full onClick={()=>onNav("order")} />
-        </>
-      )}
-    </Card>
-  );
-}
-
 // ── 대시보드 ──
-function DashPage({orders,products,vendors,factories,onNav}){
+function DashPage({orders,products,onNav}){
   const td=today();
   const tO=orders.filter(o=>o.date===td);
   const mQ=orders.filter(o=>o.date?.slice(0,7)===td.slice(0,7)).reduce((s,o)=>s+(o.items||[]).reduce((ss,i)=>ss+(i.qty||0),0),0);
@@ -352,7 +307,6 @@ function DashPage({orders,products,vendors,factories,onNav}){
           <Tag ch={`월간 ${fmtW(mAmt)}`} c="#FFFFFF" />
         </div>
       </Card>
-      <StartGuideCard vendors={vendors} factories={factories} products={products} onNav={onNav}/>
       <Card st={{marginBottom:14}}>
         <div style={{fontSize:13,fontWeight:800,marginBottom:8,color:C.txt}}>📢 제작사 공지</div>
         <div style={{fontSize:12,lineHeight:1.7,color:C.sub2}}>{DASH_NOTICES.map((n,i)=><div key={i}>• {n}</div>)}</div>
@@ -442,8 +396,40 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   }
   function addItem(){if(!selProd||!selColor||!qty){alert("상품·색상·수량을 입력하세요");return;}const idx=items.findIndex(i=>i.pid===selProd.id&&i.color===selColor);if(idx>=0)setItems(p=>p.map((it,i)=>i===idx?{...it,qty:it.qty+Number(qty)}:it));else setItems(p=>[...p,{pid:selProd.id,color:selColor,qty:Number(qty)}]);setSelProd(null);setSelColor("");setQty("");setSearch("");}
 
-  function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
+  
+  function normalizeGroupedProductsForMessage(groupedProducts){
+    const normalized = {};
+    Object.entries(groupedProducts || {}).forEach(([productName, product]) => {
+      const mergedByMatColorUnit = {};
+      (product.lines || []).forEach(line => {
+        const key = `${line.mat}|||${line.color}|||${line.unit || ""}`;
+        if(!mergedByMatColorUnit[key]){
+          mergedByMatColorUnit[key] = {...line};
+        }else{
+          mergedByMatColorUnit[key].soyo = Math.round(((mergedByMatColorUnit[key].soyo || 0) + (line.soyo || 0)) * 100) / 100;
+          mergedByMatColorUnit[key].amount = Math.round((mergedByMatColorUnit[key].amount || 0) + (line.amount || 0));
+        }
+      });
+
+      const mergedLines = Object.values(mergedByMatColorUnit);
+      const linesByMat = {};
+      mergedLines.forEach(line => {
+        const matKey = line.mat || "-";
+        if(!linesByMat[matKey]) linesByMat[matKey] = [];
+        linesByMat[matKey].push(line);
+      });
+
+      normalized[productName] = {
+        ...product,
+        linesByMat
+      };
+    });
+    return normalized;
+  }
+
+function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
     const companyName = user?.company || "디자인워커스";
+    const normalizedProducts = normalizeGroupedProductsForMessage(groupedProducts);
     let body = ``;
     body += `${vendor.name} 담당자님 안녕하세요.
 
@@ -452,22 +438,24 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
 
 `;
 
-    Object.values(groupedProducts).forEach(product => {
+    Object.values(normalizedProducts).forEach(product => {
       body += `■ 상품명: ${product.productName}
 `;
-      product.lines.forEach((line, idx) => {
-        body += `${idx + 1}. ${line.mat}
+      Object.entries(product.linesByMat || {}).forEach(([mat, lines], idx) => {
+        body += `${idx + 1}. ${mat}
 `;
-        body += `   - 컬러: ${line.color}
+        lines.forEach(line => {
+          body += `   - 컬러: ${line.color}
 `;
-        body += `   - 수량: ${fmtN(line.soyo)}${line.unit}
+          body += `   - 수량: ${fmtN(line.soyo)}${line.unit}
 `;
+        });
       });
       body += `
 `;
     });
 
-    const firstProduct = Object.values(groupedProducts)[0];
+    const firstProduct = Object.values(normalizedProducts)[0];
     body += `■ 입고처
 `;
     body += `${firstProduct?.factory || "-"}
@@ -695,16 +683,20 @@ ${vendorMemoText}
                   🧾 거래처: {d.vendor.name}
                   {d.vendor.tel && <span style={{ fontWeight: 500, color: C.sub }}> ({d.vendor.tel})</span>}
                 </div>
-                {Object.values(d.groupedProducts).map((product, pIdx) => (
+                {Object.values(normalizeGroupedProductsForMessage(d.groupedProducts)).map((product, pIdx) => (
                   <div key={pIdx} style={{ marginBottom: 14 }}>
                     <div style={{ fontWeight: 800, fontSize: 12, color: C.txt, marginBottom: 8 }}>
                       [상품명] {product.productName}
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {product.lines.map((line, lIdx) => (
+                      {Object.entries(product.linesByMat || {}).map(([mat, lines], lIdx) => (
                         <div key={lIdx} style={{background:"#F8FAFC",border:`1px solid ${C.bdr}`,borderRadius:8,padding:"8px 10px"}}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>{lIdx + 1}. {line.mat}</div>
-                          <div style={{ fontSize: 11, color: C.sub2, marginTop: 3 }}>{line.color} · {fmtN(line.soyo)}{line.unit}</div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>{lIdx + 1}. {mat}</div>
+                          {lines.map((line, cIdx) => (
+                            <div key={cIdx} style={{ fontSize: 11, color: C.sub2, marginTop: 3 }}>
+                              {line.color} · {fmtN(line.soyo)}{line.unit}
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>
@@ -1401,7 +1393,7 @@ export default function App(){
   if(screen==="splash")return<SplashPage onStart={()=>setScreen("auth")}/>;
   if(screen!=="app"||!user)return<AuthPage onLogin={handleLogin}/>;
   const pages={
-    dash:<DashPage orders={orders} products={products} vendors={vendors} factories={factories} onNav={setPage}/>,
+    dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
     order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
     list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} onNav={setPage}/>,
