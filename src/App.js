@@ -764,7 +764,7 @@ ${vendorMemoText}
   );
 }
 
-function ProdsPage({products,setProducts,vendors,factories,user}){
+function ProdsPage({products,setProducts,vendors,setVendors,factories,setFactories,user}){
   const [catF,setCatF]=useState("전체");
   const [prodSearch,setProdSearch]=useState("");
   const [sortOrd,setSortOrd]=useState("최신순");
@@ -777,6 +777,10 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
   const [editBomId,setEditBomId]=useState(null);
   const [venSearch,setVenSearch]=useState("");
   const [copySourceColor,setCopySourceColor]=useState("");
+  const [quickVendorSheet,setQuickVendorSheet]=useState(false);
+  const [quickVendor,setQuickVendor]=useState({name:"",tel:"",address:"",type:"원단"});
+  const [quickFactorySheet,setQuickFactorySheet]=useState(false);
+  const [quickFactory,setQuickFactory]=useState({name:"",tel:"",address:"",bizType:"다이마루"});
   const sf=k=>v=>setF(p=>({...p,[k]:v}));
   const getUnit=t=>["단추","지퍼","기타"].includes(t)?"개":"yd";
   let filtered=catF==="전체"?products:products.filter(p=>p.category===catF);
@@ -790,6 +794,51 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
     setF({...p, id: undefined, name: p.name + " (복사본)", colors: [...(p.colors||[])], colorBom: JSON.parse(JSON.stringify(p.colorBom||{})), imageUrl: p.imageUrl||""});
     setCi(""); setBr({type:"",mat:"",amt:"",vid:"",price:"",color:""}); setVenSearch(""); setCopySourceColor(""); setSheetStep(0); setSelColor(""); setEditBomId(null); setSheet(true);
   }
+
+  function openQuickVendor(){
+    setQuickVendor({name:venSearch||"",tel:"",address:"",type:"원단"});
+    setQuickVendorSheet(true);
+  }
+  async function saveQuickVendor(){
+    if(!quickVendor.name || !quickVendor.tel || !quickVendor.address){
+      alert("거래처명, 연락처, 주소를 입력하세요");
+      return;
+    }
+    try{
+      if(user?.token){
+        const r=await DB.insert(user.token,"vendors",{name:quickVendor.name,tel:quickVendor.tel,address:quickVendor.address,type:quickVendor.type,user_id:user.id});
+        if(r.error||r.code||!Array.isArray(r)||r.length===0){alert("거래처 등록에 실패했습니다.");return;}
+        const nv={...r[0],subTel:r[0].sub_tel||"",address:r[0].address||"",bizNo:r[0].biz_no||"",memo:r[0].memo||""};
+        if(setVendors)setVendors(vv=>[...vv,nv]);
+        setBr(b=>({...b,vid:nv.id}));
+        setVenSearch(nv.name);
+        setQuickVendorSheet(false);
+        alert("거래처가 등록되고 자동 선택되었습니다.");
+      }
+    }catch(e){alert("거래처 등록 중 오류가 발생했습니다.");}
+  }
+  function openQuickFactory(){
+    setQuickFactory({name:"",tel:"",address:"",bizType:"다이마루"});
+    setQuickFactorySheet(true);
+  }
+  async function saveQuickFactory(){
+    if(!quickFactory.name || !quickFactory.tel || !quickFactory.address){
+      alert("공장명, 연락처, 주소를 입력하세요");
+      return;
+    }
+    try{
+      if(user?.token){
+        const r=await DB.insert(user.token,"factories",{name:quickFactory.name,tel:quickFactory.tel,address:quickFactory.address,biz_type:quickFactory.bizType,user_id:user.id});
+        if(r.error||r.code||!Array.isArray(r)||r.length===0){alert("공장 등록에 실패했습니다.");return;}
+        const nf={...r[0],bizType:r[0].biz_type||"",bizNo:r[0].biz_no||"",memo:r[0].memo||""};
+        if(setFactories)setFactories(ff=>[...ff,nf]);
+        setF(p=>({...p,factoryId:nf.id,factory:nf.name||"",factoryTel:nf.tel||""}));
+        setQuickFactorySheet(false);
+        alert("공장이 등록되고 자동 선택되었습니다.");
+      }
+    }catch(e){alert("공장 등록 중 오류가 발생했습니다.");}
+  }
+
   function addColor(){const c=ci.trim();if(!c||f.colors.includes(c))return;setF(p=>({...p,colors:[...p.colors,c],colorBom:{...p.colorBom,[c]:p.colorBom[c]||[]}}));setCi("");}
   function removeColor(c){setF(p=>{const nb={...p.colorBom};delete nb[c];return{...p,colors:p.colors.filter(x=>x!==c),colorBom:nb};});if(selColor===c)setSelColor("");}
   const handleImageUpload = (e) => {
@@ -894,6 +943,20 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
           </div>
         </Card>
       ))}
+      {quickVendorSheet&&<Sheet title="신규 거래처 등록" onClose={()=>setQuickVendorSheet(false)}>
+        <Field label="거래처명" req><TxtInp val={quickVendor.name} onChange={v=>setQuickVendor(p=>({...p,name:v}))} ph="거래처명"/></Field>
+        <Field label="업체 유형"><div style={{display:"flex",flexWrap:"wrap",gap:7}}>{VEN_TYPES.map(t=>{const act=quickVendor.type===t;return<button key={t} onClick={()=>setQuickVendor(p=>({...p,type:t}))} style={{padding:"7px 13px",borderRadius:20,border:`1.5px solid ${act?(VEN_C[t]||C.acc):C.bdr}`,background:act?(VEN_C[t]||C.acc):"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,display:"flex",alignItems:"center",gap:4}}>{VEN_IC[t]} {t}</button>;})}</div></Field>
+        <Field label="연락처" req><TxtInp val={quickVendor.tel} onChange={v=>setQuickVendor(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
+        <Field label="주소" req><TxtInp val={quickVendor.address} onChange={v=>setQuickVendor(p=>({...p,address:v}))} ph="거래처 주소"/></Field>
+        <div style={{display:"flex",gap:10,marginTop:8}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setQuickVendorSheet(false)}/><Btn ch="저장 후 선택" full st={{flex:2}} onClick={saveQuickVendor}/></div>
+      </Sheet>}
+      {quickFactorySheet&&<Sheet title="신규 공장 등록" onClose={()=>setQuickFactorySheet(false)}>
+        <Field label="공장명" req><TxtInp val={quickFactory.name} onChange={v=>setQuickFactory(p=>({...p,name:v}))} ph="공장명"/></Field>
+        <Field label="업종"><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{BIZ_TYPES.map(t=>{const act=(quickFactory.bizType||"")===t;return <button key={t} onClick={()=>setQuickFactory(p=>({...p,bizType:t}))} style={{padding:"9px 13px",borderRadius:999,border:`1px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:800,fontSize:12,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div></Field>
+        <Field label="연락처" req><TxtInp val={quickFactory.tel} onChange={v=>setQuickFactory(p=>({...p,tel:v}))} ph="010-0000-0000"/></Field>
+        <Field label="주소" req><TxtInp val={quickFactory.address} onChange={v=>setQuickFactory(p=>({...p,address:v}))} ph="공장 주소"/></Field>
+        <div style={{display:"flex",gap:10,marginTop:8}}><Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setQuickFactorySheet(false)}/><Btn ch="저장 후 선택" full st={{flex:2}} onClick={saveQuickFactory}/></div>
+      </Sheet>}
       {sheet&&<Sheet title={f.id?"상품 수정":"상품 등록"} onClose={()=>setSheet(false)}>
         <StepBar cur={sheetStep} total={2}/>
         {sheetStep===0&&<>
@@ -901,7 +964,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
           <FCard>
             <FRow label="상품명" req><FInp val={f.name} onChange={sf("name")} ph="상품명 입력"/></FRow>
             <FRow label="시즌"><FSel val={f.season} onChange={sf("season")} ph="">{SEASONS.map(s=><option key={s} value={s}>{s}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
-            <FRow label="공장" last><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></FRow>
+            <FRow label="공장" last><div style={{display:"flex",alignItems:"center",gap:8,width:"100%"}}><FSel val={f.factoryId||""} onChange={v=>{const fc=factories.find(x=>x.id===v);setF(p=>({...p,factoryId:v,factory:fc?.name||"",factoryTel:fc?.tel||""}));}} ph="공장 선택">{factories.map(fc=><option key={fc.id} value={fc.id}>{fc.name}</option>)}</FSel><Btn ch="+ 신규" v="w" sz="s" onClick={openQuickFactory} st={{flexShrink:0,height:34,borderRadius:12}}/><span style={{color:C.sub,fontSize:11,flexShrink:0}}>∨</span></div></FRow>
           </FCard>
           {f.factory&&<div style={{fontSize:11,color:C.sub,marginBottom:10,marginTop:-6}}>📞 {f.factoryTel} · 발주서 자동포함</div>}
           <Field label="작업지시서 (선택)">
@@ -971,7 +1034,7 @@ function ProdsPage({products,setProducts,vendors,factories,user}){
               <div style={{fontSize:12,fontWeight:700,color:C.acc,marginBottom:10}}>✏️ [{selColor}] 원부자재 {editBomId?"수정":"추가"}</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>{MAT_TYPES.map(t=>{const act=br.type===t;return<button key={t} onClick={()=>setBr(r=>({...r,type:t}))} style={{padding:"5px 11px",borderRadius:20,whiteSpace:"nowrap",border:`1.5px solid ${act?C.acc:C.bdr}`,background:act?C.acc:"#fff",color:act?"#fff":C.sub2,fontWeight:600,fontSize:11,cursor:"pointer",fontFamily:C.fn}}>{t}</button>;})}</div>
               <FCard mb={8}>
-                <FRow label="업체명"><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 초성 검색 (예: 오다 / ㅇㄷ)" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>match(v.name,venSearch));return fv.length>0?<div style={{position:"absolute",top:"100%",right:0,width:180,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:130,overflowY:"auto"}}>{fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>)}</div>:null;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow>
+                <FRow label="업체명"><div style={{flex:1,position:"relative",display:"flex",alignItems:"center"}}><input value={venSearch} onChange={e=>{setVenSearch(e.target.value);if(!e.target.value)setBr(r=>({...r,vid:""}));}} placeholder="업체명 초성 검색 (예: 오다 / ㅇㄷ)" style={{flex:1,border:"none",outline:"none",background:"transparent",fontSize:13,color:C.txt,fontFamily:C.fn,textAlign:"right"}}/>{br.vid&&<span style={{color:C.ok,fontSize:13,marginLeft:4,flexShrink:0}}>✓</span>}{venSearch&&!br.vid&&(()=>{const fv=vendors.filter(v=>match(v.name,venSearch));return <div style={{position:"absolute",top:"100%",right:0,width:220,background:"#fff",border:`1px solid ${C.bdr}`,borderRadius:8,zIndex:9999,boxShadow:"0 4px 12px rgba(0,0,0,0.1)",maxHeight:180,overflowY:"auto"}}>{fv.length>0?fv.map(v=><div key={v.id} onClick={()=>{setBr(r=>({...r,vid:v.id}));setVenSearch(v.name);}} style={{padding:"8px 12px",borderBottom:`1px solid ${C.bdr}`,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,fontWeight:600}}>{v.name}</span><Tag ch={v.type} c={VEN_C[v.type]||C.sub}/></div>):<div style={{padding:"10px 12px"}}><div style={{fontSize:11,color:C.sub2,marginBottom:8}}>검색 결과가 없습니다</div><Btn ch="+ 신규 거래처 등록" v="w" sz="s" onClick={openQuickVendor} full/></div>}</div>;})()}</div><span style={{color:C.sub,fontSize:11,flexShrink:0,marginLeft:4}}>∨</span></FRow>
                 <FRow label={br.type==="단추"?"단추명":br.type==="지퍼"?"지퍼명":br.type==="기타"?"부자재명":"원단명"} req><FInp val={br.mat} onChange={v=>setBr(r=>({...r,mat:v}))} ph={br.type==="단추"?"예: 요크유광 11.5mm":br.type==="지퍼"?"예: YKK 3호 혼솔":br.type==="기타"?"예: 다림질 테이프":"예: 30수 면 싱글"}/></FRow>
                 <FRow label="소재 색상"><FInp val={br.color} onChange={v=>setBr(r=>({...r,color:v}))} ph="예: 핑크, 그레이"/></FRow>
                 <FRow label={`소요량 (${getUnit(br.type)})`} req><FInp val={br.amt} onChange={v=>setBr(r=>({...r,amt:v}))} ph="0" type="number"/><span style={{background:["단추","지퍼","기타"].includes(br.type)?C.warn+"20":C.acc+"15",color:["단추","지퍼","기타"].includes(br.type)?C.warn:C.acc,borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700,flexShrink:0,marginLeft:6}}>{getUnit(br.type)}</span></FRow>
@@ -1403,7 +1466,7 @@ export default function App(){
   const pages={
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
     order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
-    prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} factories={factories} user={user}/>,
+    prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} setVendors={setVendors} factories={factories} setFactories={setFactories} user={user}/>,
     list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} onNav={setPage}/>,
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
     settings:<SettingsPage user={user} setUser={setUser} vendors={vendors} factories={factories} setFactories={setFactories} onLogout={handleLogout}/>,
