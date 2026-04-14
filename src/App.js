@@ -360,7 +360,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [previewData,setPreviewData]=useState([]);
   const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
 
-  // ✅ 공장 자동 발주용 상태
+  // 공장 자동 발주
   const [sendFactoryRequest,setSendFactoryRequest]=useState(true);
   const [factoryPreviewData,setFactoryPreviewData]=useState([]);
   const [factoryMemo,setFactoryMemo]=useState("");
@@ -418,51 +418,38 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
       return;
     }
 
-    const firstItem = items[0];
-    const baseProduct = products.find(p=>p.id===firstItem.pid);
+    const firstItem=items[0];
+    const baseProduct=products.find(p=>p.id===firstItem.pid);
 
     if(!baseProduct){
       alert("상품 정보를 찾을 수 없습니다.");
       return;
     }
 
-    const allColors = baseProduct.colors || [];
+    const allColors=baseProduct.colors||[];
     if(allColors.length<=1){
       alert("추가할 다른 컬러가 없습니다.");
       return;
     }
 
-    const existingColors = items
+    const existingColors=items
       .filter(it=>it.pid===firstItem.pid)
       .map(it=>it.color);
 
-    const missingColors = allColors.filter(color=>!existingColors.includes(color));
+    const missingColors=allColors.filter(color=>!existingColors.includes(color));
 
     if(missingColors.length===0){
       alert("이미 모든 컬러가 추가되어 있습니다.");
       return;
     }
 
-    const newItems = missingColors.map(color=>({
+    const newItems=missingColors.map(color=>({
       pid:firstItem.pid,
       color,
       qty:Number(firstItem.qty)||0
     }));
 
-    setItems(prev=>[...prev, ...newItems]);
-  }
-
-    const firstQty=Number(items[0]?.qty)||0;
-
-    if(firstQty<=0){
-      alert("첫 번째 수량을 먼저 입력해주세요.");
-      return;
-    }
-
-    setItems(prev=>prev.map(it=>({
-      ...it,
-      qty:firstQty
-    })));
+    setItems(prev=>[...prev,...newItems]);
   }
 
   function normalizeGroupedProductsForMessage(groupedProducts){
@@ -530,7 +517,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     return body;
   }
 
-  // ✅ 공장별로 상품/컬러/수량 묶기
   function groupItemsByFactory(itemsToGroup){
     const factoryMap={};
 
@@ -593,31 +579,21 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     });
   }
 
-  // ✅ 공장용 생산 요청 메시지 생성
   function buildFactoryOrderBody({factoryGroup,factoryMemoText=""}){
     let body="";
-
-    body += `사장님 안녕하세요
-
-`;
-    body += `오늘 주문이요
-
-`;
+    body += `사장님 안녕하세요\n\n`;
+    body += `오늘 주문이요\n\n`;
 
     factoryGroup.products.forEach(product=>{
-      body += `■ 상품명: ${product.productName}
-`;
+      body += `■ 상품명: ${product.productName}\n`;
       product.colors.forEach(line=>{
-        body += `- ${line.color}: ${fmtN(line.qty)}장
-`;
+        body += `- ${line.color}: ${fmtN(line.qty)}장\n`;
       });
-      body += `
-`;
+      body += `\n`;
     });
 
     if(factoryMemoText){
-      body += `${factoryMemoText}
-`;
+      body += `${factoryMemoText}\n`;
     }
 
     return body;
@@ -784,7 +760,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setSending(false);
     setShowPreview(false);
 
-    // ✅ 저장 후 공장 카카오톡 자동 오픈
     if(sendFactoryRequest&&factoryPreviewData.length>0){
       const bodies=factoryPreviewData.map(d=>d.body).filter(Boolean);
       if(bodies.length>0){
@@ -860,6 +835,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
           <div style={{fontWeight:700,fontSize:14}}>발주 리스트</div>
           <Btn ch="다른 컬러 추가" v="w" sz="s" onClick={addMissingColorsFromFirstItem} disabled={!items.length} />
         </div>
+
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
             const p=products.find(x=>x.id===it.pid);
@@ -997,21 +973,6 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
                         </div>
                       </div>
                     ))}
-
-                    <div style={{fontSize:12,fontWeight:800,color:C.txt,marginBottom:12,textAlign:"right"}}>
-                      총 생산 수량: {fmtN(d.totalQty)}장
-                    </div>
-
-                    <div style={{fontSize:11,color:C.sub2,background:"#F8FAFC",borderRadius:8,padding:"10px 12px",border:`1px solid ${C.bdr}`,marginBottom:12}}>
-                      <div style={{fontWeight:700,color:C.txt,marginBottom:6}}>[공장 정보]</div>
-                      <div>{d.factoryName||"-"}</div>
-                      <div>주소 : {d.factoryAddress||"-"}</div>
-                      <div>연락처 : {d.factoryTel||"-"}</div>
-                      {factoryMemo&&<>
-                        <div style={{marginTop:8,fontWeight:700,color:C.txt}}>[공장 전달사항]</div>
-                        <div style={{whiteSpace:"pre-wrap"}}>{factoryMemo}</div>
-                      </>}
-                    </div>
 
                     <div style={{marginTop:12,display:"flex",gap:8}}>
                       <Btn ch="복사" v="w" full onClick={async()=>{const ok=await copyText(d.body);if(ok) alert("공장 요청 내용이 복사되었습니다."); else alert("복사에 실패했습니다.");}} />
