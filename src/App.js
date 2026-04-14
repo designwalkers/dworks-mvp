@@ -412,11 +412,45 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setQty("");
   }
 
-  function copyFirstQuantityToAll(){
+  function addMissingColorsFromFirstItem(){
     if(items.length===0){
-      alert("복사할 발주 항목이 없습니다.");
+      alert("먼저 발주 리스트에 컬러를 하나 추가해주세요.");
       return;
     }
+
+    const firstItem = items[0];
+    const baseProduct = products.find(p=>p.id===firstItem.pid);
+
+    if(!baseProduct){
+      alert("상품 정보를 찾을 수 없습니다.");
+      return;
+    }
+
+    const allColors = baseProduct.colors || [];
+    if(allColors.length<=1){
+      alert("추가할 다른 컬러가 없습니다.");
+      return;
+    }
+
+    const existingColors = items
+      .filter(it=>it.pid===firstItem.pid)
+      .map(it=>it.color);
+
+    const missingColors = allColors.filter(color=>!existingColors.includes(color));
+
+    if(missingColors.length===0){
+      alert("이미 모든 컬러가 추가되어 있습니다.");
+      return;
+    }
+
+    const newItems = missingColors.map(color=>({
+      pid:firstItem.pid,
+      color,
+      qty:Number(firstItem.qty)||0
+    }));
+
+    setItems(prev=>[...prev, ...newItems]);
+  }
 
     const firstQty=Number(items[0]?.qty)||0;
 
@@ -824,7 +858,7 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
 
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{fontWeight:700,fontSize:14}}>발주 리스트</div>
-          <Btn ch="수량 복사" v="w" sz="s" onClick={copyFirstQuantityToAll} disabled={!items.length} />
+          <Btn ch="다른 컬러 추가" v="w" sz="s" onClick={addMissingColorsFromFirstItem} disabled={!items.length} />
         </div>
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
