@@ -356,29 +356,34 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
   const [selColor,setSelColor]=useState("");
   const [qty,setQty]=useState("");
   const [sending,setSending]=useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewData, setPreviewData] = useState([]);
+  const [showPreview,setShowPreview]=useState(false);
+  const [previewData,setPreviewData]=useState([]);
   const [loadedRecentInfo,setLoadedRecentInfo]=useState(null);
+
+  // ✅ 공장 자동 발주용 상태
+  const [sendFactoryRequest,setSendFactoryRequest]=useState(true);
+  const [factoryPreviewData,setFactoryPreviewData]=useState([]);
+  const [factoryMemo,setFactoryMemo]=useState("");
 
   const DRAFT="dworks_draft";
   const filtered=products.filter(p=>match(p.name,search)||match(p.season,search));
-  const recentOrders = [...orders]
-    .filter(o => !o?.is_archived && Array.isArray(o?.items) && o.items.length > 0)
+  const recentOrders=[...orders]
+    .filter(o=>!o?.is_archived&&Array.isArray(o?.items)&&o.items.length>0)
     .sort((a,b)=>new Date(b.ts||b.date||0)-new Date(a.ts||a.date||0))
     .slice(0,3);
 
   function getOrderSummary(order){
-    const names = Array.from(new Set((order.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-")));
-    const totalQty = (order.items||[]).reduce((s,it)=>s+(it.qty||0),0);
+    const names=Array.from(new Set((order.items||[]).map(it=>products.find(x=>x.id===it.pid)?.name||"-")));
+    const totalQty=(order.items||[]).reduce((s,it)=>s+(it.qty||0),0);
     return {
-      title: names.join(", "),
+      title:names.join(", "),
       totalQty,
-      itemCount: (order.items||[]).length,
+      itemCount:(order.items||[]).length,
     };
   }
 
   function loadRecentOrder(order){
-    const draftItems = (order.items||[]).map(it=>({pid:it.pid,color:it.color,qty:Number(it.qty)||0}));
+    const draftItems=(order.items||[]).map(it=>({pid:it.pid,color:it.color,qty:Number(it.qty)||0}));
     setItems(draftItems);
     setSearch("");
     setSelProd(null);
@@ -386,14 +391,15 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setQty("");
     setStep(1);
     setLoadedRecentInfo({
-      orderId: order.id,
-      date: order.date,
-      summary: getOrderSummary(order),
+      orderId:order.id,
+      date:order.date,
+      summary:getOrderSummary(order),
     });
     try{
       localStorage.setItem(DRAFT, JSON.stringify({items:draftItems}));
     }catch{}
   }
+
   function addItem(){
     if(!selProd||!selColor||!qty){
       alert("상품·색상·수량을 입력하세요");
@@ -406,30 +412,29 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setQty("");
   }
 
-  
   function normalizeGroupedProductsForMessage(groupedProducts){
-    const normalized = {};
-    Object.entries(groupedProducts || {}).forEach(([productName, product]) => {
-      const mergedByMatColorUnit = {};
-      (product.lines || []).forEach(line => {
-        const key = `${line.mat}|||${line.color}|||${line.unit || ""}`;
+    const normalized={};
+    Object.entries(groupedProducts||{}).forEach(([productName,product])=>{
+      const mergedByMatColorUnit={};
+      (product.lines||[]).forEach(line=>{
+        const key=`${line.mat}|||${line.color}|||${line.unit||""}`;
         if(!mergedByMatColorUnit[key]){
-          mergedByMatColorUnit[key] = {...line};
+          mergedByMatColorUnit[key]={...line};
         }else{
-          mergedByMatColorUnit[key].soyo = Math.round(((mergedByMatColorUnit[key].soyo || 0) + (line.soyo || 0)) * 100) / 100;
-          mergedByMatColorUnit[key].amount = Math.round((mergedByMatColorUnit[key].amount || 0) + (line.amount || 0));
+          mergedByMatColorUnit[key].soyo=Math.round(((mergedByMatColorUnit[key].soyo||0)+(line.soyo||0))*100)/100;
+          mergedByMatColorUnit[key].amount=Math.round((mergedByMatColorUnit[key].amount||0)+(line.amount||0));
         }
       });
 
-      const mergedLines = Object.values(mergedByMatColorUnit);
-      const linesByMat = {};
-      mergedLines.forEach(line => {
-        const matKey = line.mat || "-";
-        if(!linesByMat[matKey]) linesByMat[matKey] = [];
+      const mergedLines=Object.values(mergedByMatColorUnit);
+      const linesByMat={};
+      mergedLines.forEach(line=>{
+        const matKey=line.mat||"-";
+        if(!linesByMat[matKey]) linesByMat[matKey]=[];
         linesByMat[matKey].push(line);
       });
 
-      normalized[productName] = {
+      normalized[productName]={
         ...product,
         linesByMat
       };
@@ -437,170 +442,339 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     return normalized;
   }
 
-function buildOrderBody({ vendor, groupedProducts, vendorMemoText = "" }) {
-    const companyName = user?.company || "디자인워커스";
-    const normalizedProducts = normalizeGroupedProductsForMessage(groupedProducts);
-    let body = ``;
-    body += `${vendor.name} 담당자님 안녕하세요.
+  function buildOrderBody({vendor,groupedProducts,vendorMemoText=""}){
+    const companyName=user?.company||"디자인워커스";
+    const normalizedProducts=normalizeGroupedProductsForMessage(groupedProducts);
+    let body=``;
+    body += `${vendor.name} 담당자님 안녕하세요.\n\n`;
+    body += `업체명: ${companyName}\n\n`;
 
-`;
-    body += `업체명: ${companyName}
-
-`;
-
-    Object.values(normalizedProducts).forEach(product => {
-      body += `■ 상품명: ${product.productName}
-`;
-      Object.entries(product.linesByMat || {}).forEach(([mat, lines], idx) => {
-        body += `${idx + 1}. ${mat}
-`;
-        lines.forEach(line => {
-          body += `   - 컬러: ${line.color}  ${fmtN(line.soyo)}${line.unit}
-`;
+    Object.values(normalizedProducts).forEach(product=>{
+      body += `■ 상품명: ${product.productName}\n`;
+      Object.entries(product.linesByMat||{}).forEach(([mat,lines],idx)=>{
+        body += `${idx+1}. ${mat}\n`;
+        lines.forEach(line=>{
+          body += `   - 컬러: ${line.color}  ${fmtN(line.soyo)}${line.unit}\n`;
         });
       });
-      body += `
-`;
+      body += `\n`;
     });
 
-    const firstProduct = Object.values(normalizedProducts)[0];
-    body += `■ 입고처
-`;
-    body += `${firstProduct?.factory || "-"}
-`;
-    body += `주소: ${factories?.find(f => f.name === firstProduct?.factory)?.address || "-"}
-`;
-    body += `연락처: ${firstProduct?.factoryTel || "-"}
-`;
+    const firstProduct=Object.values(normalizedProducts)[0];
+    body += `■ 입고처\n`;
+    body += `${firstProduct?.factory||"-"}\n`;
+    body += `주소: ${factories?.find(f=>f.name===firstProduct?.factory)?.address||"-"}\n`;
+    body += `연락처: ${firstProduct?.factoryTel||"-"}\n`;
 
-    if (memo || vendorMemoText) {
-      body += `
-`;
-      body += `■ 요청 및 전달사항
-`;
-      if (memo) body += `[공통]
-${memo}
-`;
-      if (vendorMemoText) body += `${memo ? `
-` : ``}[업체별]
-${vendorMemoText}
-`;
+    if(memo||vendorMemoText){
+      body += `\n`;
+      body += `■ 요청 및 전달사항\n`;
+      if(memo) body += `[공통]\n${memo}\n`;
+      if(vendorMemoText) body += `${memo?`\n`:``}[업체별]\n${vendorMemoText}\n`;
     }
 
-    body += `
-감사합니다.`;
+    body += `\n감사합니다.`;
     return body;
   }
 
-  function generatePreview() {
-    if (!items.length) {
+  // ✅ 공장별로 상품/컬러/수량 묶기
+  function groupItemsByFactory(itemsToGroup){
+    const factoryMap={};
+
+    for(const it of itemsToGroup){
+      const prod=products.find(x=>x.id===it.pid);
+      if(!prod) continue;
+
+      const factoryKey=prod.factory||"미지정 공장";
+      const factoryInfo=factories?.find(f=>f.name===prod.factory);
+
+      if(!factoryMap[factoryKey]){
+        factoryMap[factoryKey]={
+          factoryName:prod.factory||"미지정 공장",
+          factoryTel:prod.factoryTel||factoryInfo?.tel||"",
+          factoryAddress:factoryInfo?.address||"",
+          products:{}
+        };
+      }
+
+      if(!factoryMap[factoryKey].products[prod.name]){
+        factoryMap[factoryKey].products[prod.name]={
+          productName:prod.name,
+          colors:[]
+        };
+      }
+
+      factoryMap[factoryKey].products[prod.name].colors.push({
+        color:it.color,
+        qty:Number(it.qty)||0
+      });
+    }
+
+    return Object.values(factoryMap).map(factoryGroup=>{
+      const normalizedProducts=Object.values(factoryGroup.products).map(product=>{
+        const colorMap={};
+
+        product.colors.forEach(c=>{
+          if(!colorMap[c.color]) colorMap[c.color]=0;
+          colorMap[c.color]+=Number(c.qty)||0;
+        });
+
+        return {
+          productName:product.productName,
+          colors:Object.entries(colorMap).map(([color,qty])=>({
+            color,
+            qty
+          }))
+        };
+      });
+
+      const totalQty=normalizedProducts.reduce((sum,product)=>{
+        return sum + product.colors.reduce((s,c)=>s+(Number(c.qty)||0),0);
+      },0);
+
+      return {
+        ...factoryGroup,
+        products:normalizedProducts,
+        totalQty
+      };
+    });
+  }
+
+  // ✅ 공장용 생산 요청 메시지 생성
+  function buildFactoryOrderBody({factoryGroup,factoryMemoText=""}){
+    const companyName=user?.company||"디자인워커스";
+    let body=``;
+
+    body += `[생산 요청]\n\n`;
+    body += `${factoryGroup.factoryName} 담당자님 안녕하세요.\n\n`;
+    body += `업체명: ${companyName}\n\n`;
+
+    factoryGroup.products.forEach(product=>{
+      body += `■ 상품명: ${product.productName}\n`;
+      product.colors.forEach(line=>{
+        body += `- ${line.color}: ${fmtN(line.qty)}장\n`;
+      });
+      body += `\n`;
+    });
+
+    body += `총 수량: ${fmtN(factoryGroup.totalQty)}장\n`;
+
+    body += `\n■ 공장 정보\n`;
+    body += `공장명: ${factoryGroup.factoryName}\n`;
+    body += `주소: ${factoryGroup.factoryAddress||"-"}\n`;
+    body += `연락처: ${factoryGroup.factoryTel||"-"}\n`;
+
+    if(memo||factoryMemoText){
+      body += `\n`;
+      body += `■ 요청 및 전달사항\n`;
+      if(memo) body += `[공통]\n${memo}\n`;
+      if(factoryMemoText) body += `${memo?`\n`:``}[공장용]\n${factoryMemoText}\n`;
+    }
+
+    body += `\n감사합니다.`;
+    return body;
+  }
+
+  function generatePreview(){
+    if(!items.length){
       alert("발주 항목 추가");
       return;
     }
-    const venMap = {};
-    for (const it of items) {
-      const prod = products.find(x => x.id === it.pid);
-      if (!prod) continue;
-      const bomList = prod.colorBom?.[it.color] || prod.bom || [];
-      for (const b of bomList) {
-        const ven = vendors.find(v => v.id === b.vid);
-        if (!ven) continue;
-        const soyo = Math.round(b.amt * it.qty * 100) / 100;
-        if (!venMap[ven.id]) {
-          venMap[ven.id] = {
-            vendor: ven,
-            products: {}
+
+    const venMap={};
+    for(const it of items){
+      const prod=products.find(x=>x.id===it.pid);
+      if(!prod) continue;
+      const bomList=prod.colorBom?.[it.color]||prod.bom||[];
+      for(const b of bomList){
+        const ven=vendors.find(v=>v.id===b.vid);
+        if(!ven) continue;
+        const soyo=Math.round(b.amt*it.qty*100)/100;
+        if(!venMap[ven.id]){
+          venMap[ven.id]={
+            vendor:ven,
+            products:{}
           };
         }
-        const vendorGroup = venMap[ven.id];
-        if (!vendorGroup.products[prod.name]) {
-          vendorGroup.products[prod.name] = {
-            productName: prod.name,
-            factory: prod.factory || "-",
-            factoryTel: prod.factoryTel || "-",
-            lines: []
+        const vendorGroup=venMap[ven.id];
+        if(!vendorGroup.products[prod.name]){
+          vendorGroup.products[prod.name]={
+            productName:prod.name,
+            factory:prod.factory||"-",
+            factoryTel:prod.factoryTel||"-",
+            lines:[]
           };
         }
-        const unitPrice = Number(b.price || 0);
-        const amount = Math.round(soyo * unitPrice);
+        const unitPrice=Number(b.price||0);
+        const amount=Math.round(soyo*unitPrice);
         vendorGroup.products[prod.name].lines.push({
-          mat: b.mat || "-",
-          color: b.color || it.color,
+          mat:b.mat||"-",
+          color:b.color||it.color,
           soyo,
-          unit: b.unit || "yd",
-          type: b.type || "기타",
+          unit:b.unit||"yd",
+          type:b.type||"기타",
           unitPrice,
           amount
         });
       }
     }
-    const targets = Object.values(venMap);
-    if (!targets.length) {
+
+    const targets=Object.values(venMap);
+    if(!targets.length){
       alert("발송할 거래처가 없습니다.");
       return;
     }
-    const pData = targets.map(({ vendor, products: groupedProducts }) => {
-      const vendorMemoText = vendorMemos[vendor.id] || "";
-      const totalAmount = Object.values(groupedProducts).reduce((sum, product) => sum + product.lines.reduce((s, line) => s + (line.amount || 0), 0), 0);
+
+    const pData=targets.map(({vendor,products:groupedProducts})=>{
+      const vendorMemoText=vendorMemos[vendor.id]||"";
+      const totalAmount=Object.values(groupedProducts).reduce((sum,product)=>sum+product.lines.reduce((s,line)=>s+(line.amount||0),0),0);
       return {
         vendor,
         groupedProducts,
-        vendorMemo: vendorMemoText,
+        vendorMemo:vendorMemoText,
         totalAmount,
-        body: buildOrderBody({ vendor, groupedProducts, vendorMemoText })
+        body:buildOrderBody({vendor,groupedProducts,vendorMemoText})
       };
     });
+
+    let nextFactoryPreviewData=[];
+
+    if(sendFactoryRequest){
+      const missingFactoryItems=items.filter(it=>{
+        const prod=products.find(p=>p.id===it.pid);
+        return !prod?.factory;
+      });
+
+      if(missingFactoryItems.length>0){
+        alert("공장이 지정되지 않은 상품이 있습니다. 상품관리에서 공장을 먼저 지정해주세요.");
+        return;
+      }
+
+      const groupedFactories=groupItemsByFactory(items);
+      nextFactoryPreviewData=groupedFactories.map(factoryGroup=>({
+        ...factoryGroup,
+        body:buildFactoryOrderBody({
+          factoryGroup,
+          factoryMemoText:factoryMemo
+        })
+      }));
+    }
+
     setPreviewData(pData);
+    setFactoryPreviewData(nextFactoryPreviewData);
     setShowPreview(true);
   }
 
-  function handleVendorMemoChange(vendorId, value) {
-    setVendorMemos(prev => ({ ...prev, [vendorId]: value }));
-    setPreviewData(prev => prev.map(d => {
-      if (d.vendor.id !== vendorId) return d;
-      const nextBody = buildOrderBody({ vendor: d.vendor, groupedProducts: d.groupedProducts, vendorMemoText: value });
-      return { ...d, vendorMemo: value, body: nextBody };
+  function handleVendorMemoChange(vendorId,value){
+    setVendorMemos(prev=>({...prev,[vendorId]:value}));
+    setPreviewData(prev=>prev.map(d=>{
+      if(d.vendor.id!==vendorId) return d;
+      const nextBody=buildOrderBody({vendor:d.vendor,groupedProducts:d.groupedProducts,vendorMemoText:value});
+      return {...d,vendorMemo:value,body:nextBody};
     }));
   }
 
   function calcOrderTotalAmount(groupItems){
     return groupItems.reduce((sum,it)=>{
-      const prod = products.find(x=>x.id===it.pid);
+      const prod=products.find(x=>x.id===it.pid);
       if(!prod) return sum;
-      const bomList = prod.colorBom?.[it.color] || prod.bom || [];
-      const itemAmount = bomList.reduce((s,b)=>s + ((Number(b.amt)||0) * (Number(it.qty)||0) * (Number(b.price)||0)), 0);
+      const bomList=prod.colorBom?.[it.color]||prod.bom||[];
+      const itemAmount=bomList.reduce((s,b)=>s+((Number(b.amt)||0)*(Number(it.qty)||0)*(Number(b.price)||0)),0);
       return sum + itemAmount;
     },0);
   }
 
-  async function confirmOrder() {
+  async function confirmOrder(){
     setSending(true);
-    const groupedByPid = items.reduce((acc, it) => { if(!acc[it.pid]) acc[it.pid] = []; acc[it.pid].push(it); return acc; }, {});
-    const ts = new Date().toISOString(), d = today(), newOrders = [];
-    for(const [pid, groupItems] of Object.entries(groupedByPid)){
-      const totalAmount = Math.round(calcOrderTotalAmount(groupItems));
-      const o = { items: groupItems, status: "진행중", date: d, ts, is_archived:false, archived_at:null, total_amount: totalAmount };
-      try{
-        if(!user?.token) { alert("로그인 정보가 없습니다."); setSending(false); return; }
-        const r = await DB.insert(user.token, "orders", {...o, user_id: user.id});
-        if(r.error || r.code || !Array.isArray(r) || r.length === 0) { alert(`DB 에러: ${r.message}`); setSending(false); return; }
-        newOrders.push(r[0]);
-      }catch(e){ alert("네트워크 에러"); setSending(false); return; }
+
+    if(sendFactoryRequest){
+      const hasFactoryMissing=items.some(it=>{
+        const prod=products.find(p=>p.id===it.pid);
+        return !prod?.factory;
+      });
+
+      if(hasFactoryMissing){
+        alert("공장이 지정되지 않은 상품이 있습니다.");
+        setSending(false);
+        return;
+      }
     }
-    setOrders(p => [...newOrders, ...p]);
+
+    const groupedByPid=items.reduce((acc,it)=>{
+      if(!acc[it.pid]) acc[it.pid]=[];
+      acc[it.pid].push(it);
+      return acc;
+    },{});
+
+    const ts=new Date().toISOString(), d=today(), newOrders=[];
+
+    for(const [pid,groupItems] of Object.entries(groupedByPid)){
+      const totalAmount=Math.round(calcOrderTotalAmount(groupItems));
+      const o={items:groupItems,status:"진행중",date:d,ts,is_archived:false,archived_at:null,total_amount:totalAmount};
+      try{
+        if(!user?.token){
+          alert("로그인 정보가 없습니다.");
+          setSending(false);
+          return;
+        }
+        const r=await DB.insert(user.token,"orders",{...o,user_id:user.id});
+        if(r.error||r.code||!Array.isArray(r)||r.length===0){
+          alert(`DB 에러: ${r.message}`);
+          setSending(false);
+          return;
+        }
+        newOrders.push(r[0]);
+      }catch(e){
+        alert("네트워크 에러");
+        setSending(false);
+        return;
+      }
+    }
+
+    setOrders(p=>[...newOrders,...p]);
     try{localStorage.removeItem(DRAFT);}catch{}
     setSending(false);
     setShowPreview(false);
+
+    // ✅ 저장 후 공장 카카오톡 자동 오픈
+    if(sendFactoryRequest&&factoryPreviewData.length>0){
+      const bodies=factoryPreviewData.map(d=>d.body).filter(Boolean);
+      if(bodies.length>0){
+        const mergedFactoryBody=bodies.join("\n\n--------------------\n\n");
+        setTimeout(()=>{
+          openKakaoWithOrderText(mergedFactoryBody);
+        },300);
+      }
+    }
+
     setStep(3);
   }
 
-  function reset(){setStep(1);setItems([]);setSearch("");setSelProd(null);setSelColor("");setQty("");setMemo("");setVendorMemos({});setPreviewData([]);setShowPreview(false);setLoadedRecentInfo(null);}
+  function reset(){
+    setStep(1);
+    setItems([]);
+    setSearch("");
+    setSelProd(null);
+    setSelColor("");
+    setQty("");
+    setMemo("");
+    setVendorMemos({});
+    setPreviewData([]);
+    setShowPreview(false);
+    setLoadedRecentInfo(null);
+    setSendFactoryRequest(true);
+    setFactoryPreviewData([]);
+    setFactoryMemo("");
+  }
+
   if(step===3)return<div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",padding:24}}><div style={{fontSize:56,marginBottom:14}}>✅</div><div style={{fontWeight:900,fontSize:22,marginBottom:8}}>발주 완료!</div><div style={{color:C.sub,marginBottom:28,fontSize:13}}>{items.length}개 상품 발주</div><Btn ch="+ 새 발주 입력" onClick={reset} sz="l" st={{borderRadius:12}}/></div>;
+
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{fontWeight:900,fontSize:20,marginBottom:4}}>{step===1?"발주 입력":"발주서 확인"}</div>
       <div style={{color:C.sub,fontSize:12,marginBottom:14}}>기본 정보를 입력해 주세요</div>
       <StepBar cur={step-1}/>
+
       {step===1&&recentOrders.length>0&&<Card st={{marginBottom:14,background:"#FFF",border:`1px solid ${C.bdr}`}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
           <div style={{fontWeight:800,fontSize:13,color:C.txt}}>최근 발주 빠른 불러오기</div>
@@ -619,10 +793,12 @@ ${vendorMemoText}
           })}
         </div>
       </Card>}
+
       {step===1&&loadedRecentInfo&&items.length>0&&<div style={{marginBottom:12,padding:"12px 14px",background:"#EEF2FF",border:`1px solid #C7D2FE`,borderRadius:14}}>
         <div style={{fontSize:12,fontWeight:800,color:C.acc}}>최근 발주를 불러왔습니다</div>
         <div style={{fontSize:11,color:C.sub2,marginTop:4}}>{loadedRecentInfo.date||"-"} · {loadedRecentInfo.summary?.title||"-"} · 총 {fmtN(loadedRecentInfo.summary?.totalQty||0)}장</div>
       </div>}
+
       {step===1&&<>
         <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 추가</div>
         <Card st={{marginBottom:12}}>
@@ -631,6 +807,7 @@ ${vendorMemoText}
           <Field label="수량"><TxtInp val={qty} onChange={setQty} ph="수량 입력" type="number"/></Field>
         </Card>
         <Btn ch="+ 발주 리스트에 추가" full onClick={addItem} disabled={!selProd||!selColor||!qty} st={{marginBottom:18}}/>
+
         <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 리스트</div>
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
@@ -639,7 +816,7 @@ ${vendorMemoText}
               <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.bdr}`}}>
                 <div style={{fontSize:13}}><span style={{fontWeight:700}}>{p?.name}</span> / {it.color}</div>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <input type="number" value={it.qty||""} onChange={e=>{const v = parseInt(e.target.value)||0;setItems(prev=>prev.map((item,idx)=>idx===i?{...item,qty:v}:item));}} style={{width:50, padding:"4px 6px", border:`1px solid ${C.bdr}`, borderRadius:6, textAlign:"right", fontSize:13, fontWeight:700, color:C.acc, outline:"none"}} />
+                  <input type="number" value={it.qty||""} onChange={e=>{const v=parseInt(e.target.value)||0;setItems(prev=>prev.map((item,idx)=>idx===i?{...item,qty:v}:item));}} style={{width:50,padding:"4px 6px",border:`1px solid ${C.bdr}`,borderRadius:6,textAlign:"right",fontSize:13,fontWeight:700,color:C.acc,outline:"none"}} />
                   <span style={{fontWeight:700,fontSize:13,color:C.txt}}>장</span>
                   <button onClick={()=>setItems(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:C.sub,cursor:"pointer",fontSize:16,marginLeft:4}}>✕</button>
                 </div>
@@ -647,61 +824,65 @@ ${vendorMemoText}
             );
           })}
         </Card>
+
         <div style={{display:"flex",gap:10}}><Btn ch="임시저장" v="w" full st={{flex:1}} onClick={()=>{if(!items.length)return;try{localStorage.setItem(DRAFT,JSON.stringify({items}));alert(`✅ 임시저장 완료!`);}catch{}}}/><Btn ch="다음" full st={{flex:2}} onClick={()=>items.length?setStep(2):alert("항목 추가 필요")} disabled={!items.length}/></div>
       </>}
+
       {step===2&&<>
         <Card st={{marginBottom:12}}>
           <div style={{fontWeight:700,fontSize:13,marginBottom:12}}>발주 내역</div>
           {items.map((it,i)=>{const p=products.find(x=>x.id===it.pid);return<div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${C.bdr}`}}><div><div style={{fontWeight:700,fontSize:13}}>{p?.name}</div><div style={{color:C.sub,fontSize:11,marginTop:2}}>{it.color} · {p?.factory}</div></div><span style={{fontWeight:800,color:C.acc,fontSize:15}}>{fmtN(it.qty)}장</span></div>;})}
           <div style={{display:"flex",justifyContent:"space-between",paddingTop:10}}><span style={{fontWeight:700,fontSize:13}}>총 수량</span><span style={{fontWeight:900,color:C.acc,fontSize:17}}>{fmtN(items.reduce((s,it)=>s+it.qty,0))}장</span></div>
         </Card>
-        <div style={{marginBottom:16}}><div style={{fontWeight:700,fontSize:13,marginBottom:8,color:C.txt}}>공통 전달사항 (선택)</div><textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="예: 소량 발주건으로 10야드는 본사로, 나머지는 공장으로 배송 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"80px",boxSizing:"border-box"}}/></div>
+
+        <div style={{marginBottom:16}}>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:8,color:C.txt}}>공통 전달사항 (선택)</div>
+          <textarea value={memo} onChange={e=>setMemo(e.target.value)} placeholder="예: 소량 발주건으로 10야드는 본사로, 나머지는 공장으로 배송 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"80px",boxSizing:"border-box"}}/>
+        </div>
+
+        <div style={{marginBottom:16,padding:"14px 16px",border:`1px solid ${C.bdr}`,borderRadius:12,background:"#fff"}}>
+          <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:sendFactoryRequest?12:0}}>
+            <input type="checkbox" checked={sendFactoryRequest} onChange={e=>setSendFactoryRequest(e.target.checked)} style={{width:16,height:16}} />
+            <span style={{fontSize:13,fontWeight:800,color:C.txt}}>공장에도 생산 요청 함께 보내기</span>
+          </label>
+          {sendFactoryRequest&&(
+            <>
+              <div style={{fontSize:12,fontWeight:700,color:C.txt,marginBottom:8}}>공장 전달사항 (선택)</div>
+              <textarea value={factoryMemo} onChange={e=>setFactoryMemo(e.target.value)} placeholder="예: 컬러별 수량 기준으로 생산 부탁드립니다." style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"72px",boxSizing:"border-box"}} />
+            </>
+          )}
+        </div>
+
         <div style={{display:"flex",gap:10}}><Btn ch="← 수정" v="w" full st={{flex:1}} onClick={()=>setStep(1)}/><Btn ch={"발주 미리보기"} full st={{flex:2}} onClick={generatePreview} /></div>
       </>}
-      {showPreview && (
-        <Sheet title="발주 내용 최종 확인" onClose={() => setShowPreview(false)}>
-          <div style={{ fontSize: 13, color: C.sub, marginBottom: 16, lineHeight: 1.6 }}>
+
+      {showPreview&&(
+        <Sheet title="발주 내용 최종 확인" onClose={()=>setShowPreview(false)}>
+          <div style={{fontSize:13,color:C.sub,marginBottom:16,lineHeight:1.6}}>
             거래처별로 자동 정리된 발주서입니다.
             <br />
             내용을 확인한 뒤 바로 카카오톡으로 보내거나 복사할 수 있습니다.
           </div>
-          <div style={{ maxHeight: '55vh', overflowY: 'auto', marginBottom: 16, paddingRight: 4 }}>
-            {previewData.map((d, i) => (
-              <div
-                key={i}
-                style={{
-                  marginBottom: 16,
-                  border: `1px solid ${C.bdr}`,
-                  borderRadius: 10,
-                  padding: 14,
-                  background: "#fff",
-                  boxShadow: "0 2px 4px rgba(0,0,0,0.02)"
-                }}
-              >
-                <div
-                  style={{
-                    fontWeight: 800,
-                    fontSize: 13,
-                    marginBottom: 10,
-                    color: C.acc,
-                    borderBottom: `1px dashed ${C.bdr}`,
-                    paddingBottom: 8
-                  }}
-                >
+
+          <div style={{maxHeight:'55vh',overflowY:'auto',marginBottom:16,paddingRight:4}}>
+            {previewData.map((d,i)=>(
+              <div key={i} style={{marginBottom:16,border:`1px solid ${C.bdr}`,borderRadius:10,padding:14,background:"#fff",boxShadow:"0 2px 4px rgba(0,0,0,0.02)"}}>
+                <div style={{fontWeight:800,fontSize:13,marginBottom:10,color:C.acc,borderBottom:`1px dashed ${C.bdr}`,paddingBottom:8}}>
                   🧾 거래처: {d.vendor.name}
-                  {d.vendor.tel && <span style={{ fontWeight: 500, color: C.sub }}> ({d.vendor.tel})</span>}
+                  {d.vendor.tel&&<span style={{fontWeight:500,color:C.sub}}> ({d.vendor.tel})</span>}
                 </div>
-                {Object.values(normalizeGroupedProductsForMessage(d.groupedProducts)).map((product, pIdx) => (
-                  <div key={pIdx} style={{ marginBottom: 14 }}>
-                    <div style={{ fontWeight: 800, fontSize: 12, color: C.txt, marginBottom: 8 }}>
+
+                {Object.values(normalizeGroupedProductsForMessage(d.groupedProducts)).map((product,pIdx)=>(
+                  <div key={pIdx} style={{marginBottom:14}}>
+                    <div style={{fontWeight:800,fontSize:12,color:C.txt,marginBottom:8}}>
                       [상품명] {product.productName}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {Object.entries(product.linesByMat || {}).map(([mat, lines], lIdx) => (
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {Object.entries(product.linesByMat||{}).map(([mat,lines],lIdx)=>(
                         <div key={lIdx} style={{background:"#F8FAFC",border:`1px solid ${C.bdr}`,borderRadius:8,padding:"8px 10px"}}>
-                          <div style={{ fontSize: 12, fontWeight: 700, color: C.txt }}>{lIdx + 1}. {mat}</div>
-                          {lines.map((line, cIdx) => (
-                            <div key={cIdx} style={{ fontSize: 11, color: C.sub2, marginTop: 3 }}>
+                          <div style={{fontSize:12,fontWeight:700,color:C.txt}}>{lIdx+1}. {mat}</div>
+                          {lines.map((line,cIdx)=>(
+                            <div key={cIdx} style={{fontSize:11,color:C.sub2,marginTop:3}}>
                               {line.color}  {fmtN(line.soyo)}{line.unit}
                             </div>
                           ))}
@@ -710,59 +891,97 @@ ${vendorMemoText}
                     </div>
                   </div>
                 ))}
+
                 <div style={{fontSize:11,color:C.sub2,background:"#F8FAFC",borderRadius:8,padding:"10px 12px",border:`1px solid ${C.bdr}`,marginBottom:12}}>
-                  <div style={{ fontWeight: 700, color: C.txt, marginBottom: 6 }}>[입고처]</div>
-                  <div>{Object.values(d.groupedProducts)[0]?.factory || "-"}</div>
-                  <div>주소 : {factories?.find(f => f.name === Object.values(d.groupedProducts)[0]?.factory)?.address || "-"}</div>
-                  <div>연락처 : {Object.values(d.groupedProducts)[0]?.factoryTel || "-"}</div>
-                  {memo && <>
-                    <div style={{ marginTop: 8, fontWeight: 700, color: C.txt }}>[공통 전달사항]</div>
-                    <div style={{ whiteSpace: "pre-wrap" }}>{memo}</div>
+                  <div style={{fontWeight:700,color:C.txt,marginBottom:6}}>[입고처]</div>
+                  <div>{Object.values(d.groupedProducts)[0]?.factory||"-"}</div>
+                  <div>주소 : {factories?.find(f=>f.name===Object.values(d.groupedProducts)[0]?.factory)?.address||"-"}</div>
+                  <div>연락처 : {Object.values(d.groupedProducts)[0]?.factoryTel||"-"}</div>
+                  {memo&&<>
+                    <div style={{marginTop:8,fontWeight:700,color:C.txt}}>[공통 전달사항]</div>
+                    <div style={{whiteSpace:"pre-wrap"}}>{memo}</div>
                   </>}
                 </div>
-                <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: C.txt, marginBottom: 8 }}>업체별 메모 (선택)</div>
-                  <textarea
-                    value={vendorMemos[d.vendor.id] || ""}
-                    onChange={e => handleVendorMemoChange(d.vendor.id, e.target.value)}
-                    placeholder="이 거래처에만 전달할 별도 요청사항을 입력하세요"
-                    style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"78px",boxSizing:"border-box"}}
-                  />
+
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.txt,marginBottom:8}}>업체별 메모 (선택)</div>
+                  <textarea value={vendorMemos[d.vendor.id]||""} onChange={e=>handleVendorMemoChange(d.vendor.id,e.target.value)} placeholder="이 거래처에만 전달할 별도 요청사항을 입력하세요" style={{width:"100%",padding:"12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontSize:13,fontFamily:C.fn,outline:"none",resize:"vertical",minHeight:"78px",boxSizing:"border-box"}} />
                 </div>
-                {d.totalAmount > 0 && (
+
+                {d.totalAmount>0&&(
                   <div style={{fontSize:12,fontWeight:800,color:C.txt,marginBottom:12,textAlign:"right"}}>
                     거래처 예상 합계: {fmtW(d.totalAmount)}
                   </div>
                 )}
-                <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                  <Btn
-                    ch="복사"
-                    v="w"
-                    full
-                    onClick={async () => {
-                      const ok = await copyText(d.body);
-                      if (ok) alert("발주 내용이 복사되었습니다.");
-                      else alert("복사에 실패했습니다.");
-                    }}
-                  />
-                  <Btn
-                    ch="카카오톡으로 보내기"
-                    full
-                    onClick={() => openKakaoWithOrderText(d.body)}
-                  />
+
+                <div style={{marginTop:12,display:"flex",gap:8}}>
+                  <Btn ch="복사" v="w" full onClick={async()=>{const ok=await copyText(d.body);if(ok) alert("발주 내용이 복사되었습니다."); else alert("복사에 실패했습니다.");}} />
+                  <Btn ch="카카오톡으로 보내기" full onClick={()=>openKakaoWithOrderText(d.body)} />
                 </div>
               </div>
             ))}
+
+            {factoryPreviewData.length>0&&(
+              <div style={{marginTop:8}}>
+                <div style={{fontWeight:900,fontSize:14,color:C.txt,marginBottom:12}}>🏭 공장 생산 요청</div>
+
+                {factoryPreviewData.map((d,i)=>(
+                  <div key={`factory-${i}`} style={{marginBottom:16,border:`1px solid ${C.bdr}`,borderRadius:10,padding:14,background:"#fff",boxShadow:"0 2px 4px rgba(0,0,0,0.02)"}}>
+                    <div style={{fontWeight:800,fontSize:13,marginBottom:10,color:C.acc,borderBottom:`1px dashed ${C.bdr}`,paddingBottom:8}}>
+                      🏭 공장: {d.factoryName}
+                      {d.factoryTel&&<span style={{fontWeight:500,color:C.sub}}> ({d.factoryTel})</span>}
+                    </div>
+
+                    {d.products.map((product,pIdx)=>(
+                      <div key={pIdx} style={{marginBottom:14}}>
+                        <div style={{fontWeight:800,fontSize:12,color:C.txt,marginBottom:8}}>
+                          [상품명] {product.productName}
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                          {product.colors.map((line,cIdx)=>(
+                            <div key={cIdx} style={{background:"#F8FAFC",border:`1px solid ${C.bdr}`,borderRadius:8,padding:"8px 10px",fontSize:12,color:C.sub2}}>
+                              {line.color} · {fmtN(line.qty)}장
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    <div style={{fontSize:12,fontWeight:800,color:C.txt,marginBottom:12,textAlign:"right"}}>
+                      총 생산 수량: {fmtN(d.totalQty)}장
+                    </div>
+
+                    <div style={{fontSize:11,color:C.sub2,background:"#F8FAFC",borderRadius:8,padding:"10px 12px",border:`1px solid ${C.bdr}`,marginBottom:12}}>
+                      <div style={{fontWeight:700,color:C.txt,marginBottom:6}}>[공장 정보]</div>
+                      <div>{d.factoryName||"-"}</div>
+                      <div>주소 : {d.factoryAddress||"-"}</div>
+                      <div>연락처 : {d.factoryTel||"-"}</div>
+                      {factoryMemo&&<>
+                        <div style={{marginTop:8,fontWeight:700,color:C.txt}}>[공장 전달사항]</div>
+                        <div style={{whiteSpace:"pre-wrap"}}>{factoryMemo}</div>
+                      </>}
+                    </div>
+
+                    <div style={{marginTop:12,display:"flex",gap:8}}>
+                      <Btn ch="복사" v="w" full onClick={async()=>{const ok=await copyText(d.body);if(ok) alert("공장 요청 내용이 복사되었습니다."); else alert("복사에 실패했습니다.");}} />
+                      <Btn ch="카카오톡으로 보내기" full onClick={()=>openKakaoWithOrderText(d.body)} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Btn ch="취소" v="w" full st={{ flex: 1 }} onClick={() => setShowPreview(false)} />
-            <Btn ch={sending ? "저장 중..." : "최종 저장하기"} full st={{ flex: 2, background: C.acc }} onClick={confirmOrder} disabled={sending} />
+
+          <div style={{display:"flex",gap:10}}>
+            <Btn ch="취소" v="w" full st={{flex:1}} onClick={()=>setShowPreview(false)} />
+            <Btn ch={sending?"저장 중...":"최종 저장하기"} full st={{flex:2,background:C.acc}} onClick={confirmOrder} disabled={sending} />
           </div>
         </Sheet>
       )}
     </div>
   );
 }
+
 
 function ProdsPage({products,setProducts,vendors,setVendors,factories,setFactories,user}){
   const [catF,setCatF]=useState("전체");
