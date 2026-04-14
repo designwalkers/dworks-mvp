@@ -412,6 +412,25 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
     setQty("");
   }
 
+  function copyFirstQuantityToAll(){
+    if(items.length===0){
+      alert("복사할 발주 항목이 없습니다.");
+      return;
+    }
+
+    const firstQty=Number(items[0]?.qty)||0;
+
+    if(firstQty<=0){
+      alert("첫 번째 수량을 먼저 입력해주세요.");
+      return;
+    }
+
+    setItems(prev=>prev.map(it=>({
+      ...it,
+      qty:firstQty
+    })));
+  }
+
   function normalizeGroupedProductsForMessage(groupedProducts){
     const normalized={};
     Object.entries(groupedProducts||{}).forEach(([productName,product])=>{
@@ -803,7 +822,10 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
         </Card>
         <Btn ch="+ 발주 리스트에 추가" full onClick={addItem} disabled={!selProd||!selColor||!qty} st={{marginBottom:18}}/>
 
-        <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>발주 리스트</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <div style={{fontWeight:700,fontSize:14}}>발주 리스트</div>
+          <Btn ch="수량 복사" v="w" sz="s" onClick={copyFirstQuantityToAll} disabled={!items.length} />
+        </div>
         <Card st={{marginBottom:18}}>
           {items.length===0?<div style={{padding:"16px 0",color:C.sub,fontSize:12,textAlign:"center"}}>추가된 항목 없음</div>:items.map((it,i)=>{
             const p=products.find(x=>x.id===it.pid);
