@@ -542,36 +542,31 @@ function OrderPage({products,orders,setOrders,vendors,factories,user}){
 
   // ✅ 공장용 생산 요청 메시지 생성
   function buildFactoryOrderBody({factoryGroup,factoryMemoText=""}){
-    const companyName=user?.company||"디자인워커스";
-    let body=``;
+    let body="";
 
-    body += `[생산 요청]\n\n`;
-    body += `${factoryGroup.factoryName} 담당자님 안녕하세요.\n\n`;
-    body += `업체명: ${companyName}\n\n`;
+    body += `사장님 안녕하세요
+
+`;
+    body += `오늘 주문이요
+
+`;
 
     factoryGroup.products.forEach(product=>{
-      body += `■ 상품명: ${product.productName}\n`;
+      body += `■ 상품명: ${product.productName}
+`;
       product.colors.forEach(line=>{
-        body += `- ${line.color}: ${fmtN(line.qty)}장\n`;
+        body += `- ${line.color}: ${fmtN(line.qty)}장
+`;
       });
-      body += `\n`;
+      body += `
+`;
     });
 
-    body += `총 수량: ${fmtN(factoryGroup.totalQty)}장\n`;
-
-    body += `\n■ 공장 정보\n`;
-    body += `공장명: ${factoryGroup.factoryName}\n`;
-    body += `주소: ${factoryGroup.factoryAddress||"-"}\n`;
-    body += `연락처: ${factoryGroup.factoryTel||"-"}\n`;
-
-    if(memo||factoryMemoText){
-      body += `\n`;
-      body += `■ 요청 및 전달사항\n`;
-      if(memo) body += `[공통]\n${memo}\n`;
-      if(factoryMemoText) body += `${memo?`\n`:``}[공장용]\n${factoryMemoText}\n`;
+    if(factoryMemoText){
+      body += `${factoryMemoText}
+`;
     }
 
-    body += `\n감사합니다.`;
     return body;
   }
 
