@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import * as XLSX from "xlsx";
 
 // ── Kakao Copy & Open ──────────────────────────────────────────
 async function copyText(text) {
@@ -1283,7 +1284,7 @@ function ProdsPage({products,setProducts,vendors,setVendors,factories,setFactori
 
 // 🚀 발주 리스트 🚀
 
-function ListPage({orders,setOrders,products,user,onNav}){
+function ListPage({orders,setOrders,products,vendors,user,onNav}){
   const [boxFilter,setBoxFilter]=useState("진행중");
   const [filter,setFilter]=useState("전체");
   const [dateFilter,setDateFilter]=useState("전체");
@@ -1415,6 +1416,97 @@ function ListPage({orders,setOrders,products,user,onNav}){
     }catch{}
   }
 
+  function flattenOrdersForExcel(orderList){
+    const rows=[];
+
+    orderList.forEach(order=>{
+      (order.items||[]).forEach(it=>{
+        const prod=products.find(p=>p.id===it.pid);
+        if(!prod) return;
+
+        const bomList=prod.colorBom?.[it.color] || prod.bom || [];
+
+        if(bomList.length===0){
+          rows.push({
+            발주일: order.date || "",
+            상품명: prod.name || "",
+            컬러: it.color || "",
+            수량: Number(it.qty)||0,
+            거래처: "",
+            공장: prod.factory || "",
+            원부자재: "",
+            단가: "",
+            금액: "",
+            상태: order.status || ""
+          });
+          return;
+        }
+
+        bomList.forEach(b=>{
+          const qty=Number(it.qty)||0;
+          const soyo=(Number(b.amt)||0) * qty;
+          const price=Number(b.price)||0;
+          const amount=Math.round(soyo * price);
+          const vendorName=vendors?.find(v=>v.id===b.vid)?.name || "";
+
+          rows.push({
+            발주일: order.date || "",
+            상품명: prod.name || "",
+            컬러: it.color || "",
+            수량: qty,
+            거래처: vendorName,
+            공장: prod.factory || "",
+            원부자재: b.mat || "",
+            단가: price ? Math.round(price) : "",
+            금액: amount ? amount : "",
+            상태: order.status || ""
+          });
+        });
+      });
+    });
+
+    return rows;
+  }
+
+  const excelRows=flattenOrdersForExcel(filtered);
+  const excelTotalQty=excelRows.reduce((sum,row)=>sum+(Number(row.수량)||0),0);
+  const excelTotalAmount=excelRows.reduce((sum,row)=>sum+(Number(row.금액)||0),0);
+
+  function downloadExcel(){
+    if(dateFilter!=="기간설정"){
+      alert("엑셀 다운로드는 기간설정 후 사용해주세요.");
+      return;
+    }
+    if(!startDate || !endDate){
+      alert("시작일과 종료일을 선택해주세요.");
+      return;
+    }
+    if(filtered.length===0){
+      alert("조회된 발주 내역이 없습니다.");
+      return;
+    }
+
+    const rows=flattenOrdersForExcel(filtered);
+    if(rows.length===0){
+      alert("다운로드할 데이터가 없습니다.");
+      return;
+    }
+
+    const sheet=XLSX.utils.json_to_sheet(rows);
+
+    const widths=[
+      {wch:12},{wch:20},{wch:10},{wch:8},{wch:16},
+      {wch:14},{wch:18},{wch:10},{wch:12},{wch:10}
+    ];
+    sheet["!cols"]=widths;
+
+    const wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb,sheet,"발주리스트");
+
+    const filename=`발주리스트_${startDate}_${endDate}.xlsx`;
+    XLSX.writeFile(wb,filename);
+  }
+
   return(
     <div style={{padding:"14px 14px 80px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:10}}>
@@ -1433,7 +1525,33 @@ function ListPage({orders,setOrders,products,user,onNav}){
         {["전체","오늘","어제","1주일","기간설정"].map(s=><button key={s} onClick={()=>{setDateFilter(s);clearSelection();setOpen(null);}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${dateFilter===s?C.acc:C.bdr}`,background:dateFilter===s?C.acc+"18":"#fff",color:dateFilter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
       </div>
 
-      {dateFilter==="기간설정"&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/><span style={{color:C.sub}}>-</span><input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/></div>}
+      {dateFilter==="기간설정"&&<>
+        <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/>
+          <span style={{color:C.sub}}>-</span>
+          <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={{flex:1,padding:"8px 12px",border:`1px solid ${C.bdr}`,borderRadius:8,fontFamily:C.fn,fontSize:12,outline:"none",color:C.txt}}/>
+        </div>
+
+        <Card st={{marginBottom:12}}>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <Btn ch="엑셀 다운로드" full onClick={downloadExcel} st={{flex:1}} />
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.sub2}}>총 발주건수</div>
+              <div style={{marginTop:4,fontSize:18,fontWeight:900,color:C.txt}}>{fmtN(filtered.length)}건</div>
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.sub2}}>총 수량</div>
+              <div style={{marginTop:4,fontSize:18,fontWeight:900,color:C.txt}}>{fmtN(excelTotalQty)}</div>
+            </div>
+            <div style={{flex:1,minWidth:0,textAlign:"right"}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.sub2}}>총 금액</div>
+              <div style={{marginTop:4,fontSize:18,fontWeight:900,color:C.txt}}>{fmtW(excelTotalAmount)}</div>
+            </div>
+          </div>
+        </Card>
+      </>}
 
       <div style={{display:"flex",gap:7,marginBottom:10,overflowX:"auto",paddingBottom:4}}>
         {statusTabs.map(s=><button key={s} onClick={()=>{setFilter(s);clearSelection();setOpen(null);}} style={{padding:"6px 14px",borderRadius:20,flexShrink:0,border:`1.5px solid ${filter===s?C.acc:C.bdr}`,background:filter===s?C.acc+"18":"#fff",color:filter===s?C.acc:C.sub2,fontWeight:600,fontSize:12,cursor:"pointer",fontFamily:C.fn,whiteSpace:"nowrap"}}>{s}</button>)}
@@ -1492,6 +1610,7 @@ function ListPage({orders,setOrders,products,user,onNav}){
     </div>
   );
 }
+
 
 function VendorPage({vendors,setVendors,user}){
   const [sheet,setSheet]=useState(false);
@@ -1698,7 +1817,7 @@ export default function App(){
     dash:<DashPage orders={orders} products={products} onNav={setPage}/>,
     order:<OrderPage products={products} orders={orders} setOrders={setOrders} vendors={vendors} factories={factories} user={user} onNav={setPage}/>,
     prods:<ProdsPage products={products} setProducts={setProducts} vendors={vendors} setVendors={setVendors} factories={factories} setFactories={setFactories} user={user}/>,
-    list:<ListPage orders={orders} setOrders={setOrders} products={products} user={user} onNav={setPage}/>,
+    list:<ListPage orders={orders} setOrders={setOrders} products={products} vendors={vendors} user={user} onNav={setPage}/>,
     vendors:<VendorPage vendors={vendors} setVendors={setVendors} user={user}/>,
     settings:<SettingsPage user={user} setUser={setUser} vendors={vendors} factories={factories} setFactories={setFactories} onLogout={handleLogout}/>,
   };
